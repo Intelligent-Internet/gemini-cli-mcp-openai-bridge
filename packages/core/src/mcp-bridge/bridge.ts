@@ -12,7 +12,7 @@ import {
   type Tool,
 } from '@google/genai';
 import { randomUUID } from 'node:crypto';
-import { type GeminiRequest } from '../core/geminiRequest.js';
+import { type GeminiCodeRequest as GeminiRequest } from '../core/geminiRequest.js';
 
 const LOG_PREFIX = '[MCP SERVER]';
 
