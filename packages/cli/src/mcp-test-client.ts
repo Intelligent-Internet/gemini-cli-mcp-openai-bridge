@@ -3,10 +3,15 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ListToolsResultSchema,
   type Notification,
-  TextContentBlockSchema,
 } from '@modelcontextprotocol/sdk/types.js'; // <--- 引入 Notification 类型
 import { URL } from 'url';
 import { z } from 'zod';
+
+// Define the schema for a text content block, as it's not exported by the SDK.
+const TextContentBlockSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+});
 
 // --- 配置 ---
 const SERVER_URL = 'http://localhost:8282/mcp';
