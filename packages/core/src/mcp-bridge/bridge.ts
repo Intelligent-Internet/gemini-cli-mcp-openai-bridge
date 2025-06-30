@@ -183,18 +183,14 @@ export class GcliMcpBridge {
 
         const geminiClient = this.config.getGeminiClient();
 
-        const request: GeminiRequest = {
-          message: messages,
-          config: {
+        // Pass the dynamic tools and system prompt in the config for this specific call
+        const stream = await geminiClient.sendMessageStream(
+          messages,
+          signal, // Use the signal from the MCP request
+          {
             tools: tools,
             systemInstruction: systemInstruction,
           },
-        };
-
-        // Pass the dynamic tools and system prompt in the config for this specific call
-        const stream = await geminiClient.sendMessageStream(
-          request,
-          signal, // Use the signal from the MCP request
         );
 
         let fullTextResponse = '';
