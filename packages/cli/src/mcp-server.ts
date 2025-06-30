@@ -46,7 +46,8 @@ function mergeMcpServers(
 
 async function startMcpServer() {
   // 1. 独立的、简单的参数解析
-  const portArg = process.argv.find((arg) => arg.startsWith('--port='));
+  const args = process.argv.slice(2);
+  const portArg = args.find((arg) => arg.startsWith('--port='));
   const port = portArg ? parseInt(portArg.split('=')[1], 10) : 8765;
 
   if (isNaN(port)) {
