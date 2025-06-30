@@ -212,7 +212,16 @@ export class GcliMcpBridge {
             console.log(`${LOG_PREFIX} 🛑 Request was aborted by the client.`);
             break;
           }
-          const chunkText = event.text();
+          let chunkText = '';
+          if (event.candidates && event.candidates.length > 0) {
+            const parts = event.candidates[0].content?.parts || [];
+            for (const part of parts) {
+              if (part.text) {
+                chunkText += part.text;
+              }
+            }
+          }
+
           if (chunkText) {
             fullTextResponse += chunkText;
             await sendNotification({
