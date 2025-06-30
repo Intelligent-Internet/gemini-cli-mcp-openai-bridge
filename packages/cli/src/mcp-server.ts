@@ -49,6 +49,7 @@ async function startMcpServer() {
   const args = process.argv.slice(2);
   const portArg = args.find((arg) => arg.startsWith('--port='));
   const port = portArg ? parseInt(portArg.split('=')[1], 10) : 8765;
+  const debugMode = args.includes('--debug');
 
   if (isNaN(port)) {
     console.error('Invalid port number provided. Use --port=<number>.');
@@ -65,12 +66,12 @@ async function startMcpServer() {
   const cliVersion = await getCliVersion();
 
   // 3. 手动构造 ConfigParameters，绕开 yargs
-  const fileService = new FileDiscoveryService(workspaceRoot);
+  const fileDiscoveryService = new FileDiscoveryService(workspaceRoot);
   const extensionContextFilePaths = extensions.flatMap((e) => e.contextFiles);
   const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
     workspaceRoot,
-    settings.merged.debugMode || false,
-    fileService,
+    debugMode,
+    fileDiscoveryService,
     extensionContextFilePaths,
   );
 
@@ -84,11 +85,11 @@ async function startMcpServer() {
 
   const config = new Config({
     sessionId: sessionId,
-    model: settings.merged.model || DEFAULT_GEMINI_MODEL,
+    model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
     targetDir: workspaceRoot,
     cwd: workspaceRoot,
-    debugMode: settings.merged.debugMode || false,
+    debugMode: debugMode,
     approvalMode: ApprovalMode.YOLO, // 强制为 YOLO 模式
     sandbox: sandboxConfig,
     userMemory: memoryContent,
