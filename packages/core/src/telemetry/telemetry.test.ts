@@ -29,6 +29,7 @@ describe('telemetry', () => {
       targetDir: '/test/dir',
       debugMode: false,
       cwd: '/test/dir',
+      cliVersion: 'test-version',
     });
     vi.spyOn(mockConfig, 'getTelemetryEnabled').mockReturnValue(true);
     vi.spyOn(mockConfig, 'getTelemetryOtlpEndpoint').mockReturnValue(

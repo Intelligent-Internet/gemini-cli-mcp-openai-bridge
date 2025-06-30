@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { type Config } from '../config/config.js';
 import { type Tool, type ToolResult } from '../tools/tools.js';
 import { type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { type Part } from '@google/genai';
 // import { FunctionDeclarationSchema } from '@google/genai'; // 假设这个类型可以从 genai SDK 导入
 
 export class GcliMcpBridge {
@@ -87,10 +88,10 @@ export class GcliMcpBridge {
         title: 'Gemini API Proxy',
         description:
           "Proxies a request to the Gemini API through the CLI's authenticated client.",
-        inputSchema: z.object({
+        inputSchema: {
           messages: z.any(),
           // ... 其他 LLM 参数
-        }),
+        },
       },
       async (args, { sendNotification }) => {
         const geminiClient = this.config.getGeminiClient();
@@ -160,8 +161,12 @@ export class GcliMcpBridge {
       return { content: [{ type: 'text', text: gcliResult.llmContent }] };
     }
 
-    // PartListUnion -> ContentBlock[]
-    const contentBlocks = gcliResult.llmContent.map((part) => {
+    const parts = Array.isArray(gcliResult.llmContent)
+      ? gcliResult.llmContent
+      : [gcliResult.llmContent];
+
+    // Part[] -> ContentBlock[]
+    const contentBlocks = parts.map((part: Part) => {
       if ('text' in part && part.text) {
         return { type: 'text' as const, text: part.text };
       }

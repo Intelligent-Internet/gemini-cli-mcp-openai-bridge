@@ -27,6 +27,7 @@ describe('Flash Fallback Integration', () => {
       debugMode: false,
       cwd: '/test',
       model: 'gemini-2.5-pro',
+      cliVersion: 'test-version',
     });
 
     // Reset simulation state for each test
