@@ -26,12 +26,11 @@ async function startMcpServer() {
     settings.merged,
     extensions,
     sessionId,
-    cliVersion,
   );
   config.setApprovalMode(ApprovalMode.YOLO); // 关键：所有工具调用都自动批准
 
   // 3. 初始化并启动 MCP 桥接服务
-  const mcpBridge = new GcliMcpBridge(config);
+  const mcpBridge = new GcliMcpBridge(config, cliVersion);
   await mcpBridge.start(port);
 
   console.log(`Gemini CLI MCP Bridge is running on port ${port}`);

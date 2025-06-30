@@ -12,13 +12,12 @@ export class GcliMcpBridge {
   private readonly mcpServer: McpServer;
   private readonly config: Config;
 
-  constructor(config: Config) {
+  constructor(config: Config, cliVersion: string) {
     this.config = config;
     this.mcpServer = new McpServer(
       {
         name: 'gemini-cli-mcp-server',
-        // 调用我们即将添加的新方法
-        version: this.config.getCliVersion(),
+        version: cliVersion,
       },
       {
         capabilities: { tools: {} },

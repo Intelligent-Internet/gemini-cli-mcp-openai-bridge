@@ -165,7 +165,6 @@ export async function loadCliConfig(
   settings: Settings,
   extensions: Extension[],
   sessionId: string,
-  cliVersion?: string,
 ): Promise<Config> {
   loadEnvironment();
 
@@ -246,7 +245,6 @@ export async function loadCliConfig(
     bugCommand: settings.bugCommand,
     model: argv.model!,
     extensionContextFilePaths,
-    cliVersion: cliVersion ?? (await getCliVersion()),
   });
 }
 

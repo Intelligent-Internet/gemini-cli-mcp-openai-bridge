@@ -91,7 +91,6 @@ describe('Server Config (config.ts)', () => {
     telemetry: TELEMETRY_SETTINGS,
     sessionId: SESSION_ID,
     model: MODEL,
-    cliVersion: 'test-version',
   };
 
   beforeEach(() => {

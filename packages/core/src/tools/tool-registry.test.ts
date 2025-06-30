@@ -134,7 +134,6 @@ const baseConfigParams: ConfigParameters = {
   geminiMdFileCount: 0,
   approvalMode: ApprovalMode.DEFAULT,
   sessionId: 'test-session-id',
-  cliVersion: 'test-version',
 };
 
 describe('ToolRegistry', () => {

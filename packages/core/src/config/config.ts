@@ -130,7 +130,6 @@ export interface ConfigParameters {
   bugCommand?: BugCommandSettings;
   model: string;
   extensionContextFilePaths?: string[];
-  cliVersion: string;
 }
 
 export class Config {
@@ -169,7 +168,6 @@ export class Config {
   private readonly bugCommand: BugCommandSettings | undefined;
   private readonly model: string;
   private readonly extensionContextFilePaths: string[];
-  private readonly cliVersion: string;
   private modelSwitchedDuringSession: boolean = false;
   flashFallbackHandler?: FlashFallbackHandler;
 
@@ -213,7 +211,6 @@ export class Config {
     this.bugCommand = params.bugCommand;
     this.model = params.model;
     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
-    this.cliVersion = params.cliVersion;
 
     if (params.contextFileName) {
       setGeminiMdFilename(params.contextFileName);
@@ -258,10 +255,6 @@ export class Config {
     this.modelSwitchedDuringSession = false;
 
     // Note: In the future, we may want to reset any cached state when switching auth methods
-  }
-
-  getCliVersion(): string {
-    return this.cliVersion;
   }
 
   getSessionId(): string {
