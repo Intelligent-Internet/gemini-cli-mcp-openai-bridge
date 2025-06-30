@@ -12,6 +12,7 @@ import {
   type Tool,
 } from '@google/genai';
 import { randomUUID } from 'node:crypto';
+import { type GeminiRequest } from '../core/geminiRequest.js';
 
 const LOG_PREFIX = '[MCP SERVER]';
 
@@ -182,14 +183,18 @@ export class GcliMcpBridge {
 
         const geminiClient = this.config.getGeminiClient();
 
+        const request: GeminiRequest = {
+          message: messages,
+          config: {
+            tools: tools,
+            systemInstruction: systemInstruction,
+          },
+        };
+
         // Pass the dynamic tools and system prompt in the config for this specific call
         const stream = await geminiClient.sendMessageStream(
-          messages,
+          request,
           signal, // Use the signal from the MCP request
-          {
-            tools,
-            systemInstruction,
-          },
         );
 
         let fullTextResponse = '';
