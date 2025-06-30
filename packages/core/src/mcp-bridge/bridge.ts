@@ -11,6 +11,7 @@ import {
   type PartListUnion,
   type Tool,
   type GenerateContentConfig,
+  type GenerateContentResponse,
 } from '@google/genai';
 import { randomUUID } from 'node:crypto';
 import { GeminiChat } from '../core/geminiChat.js';
@@ -211,11 +212,12 @@ export class GcliMcpBridge {
             console.log(`${LOG_PREFIX} 🛑 Request was aborted by the client.`);
             break;
           }
-          if (event.type === 'content' && event.value) {
-            fullTextResponse += event.value;
+          const chunkText = event.text();
+          if (chunkText) {
+            fullTextResponse += chunkText;
             await sendNotification({
               method: 'notifications/message',
-              params: { level: 'info', data: `[STREAM_CHUNK]${event.value}` },
+              params: { level: 'info', data: `[STREAM_CHUNK]${chunkText}` },
             });
           }
           // Note: Tool call events from the proxied call are not currently forwarded.
