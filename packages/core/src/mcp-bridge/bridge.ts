@@ -178,38 +178,45 @@ export class GcliMcpBridge {
   }
   
   private convertJsonSchemaToZod(jsonSchema: any): any {
+    // 如果没有 schema 或 properties，返回一个空的 shape 对象
     if (!jsonSchema || !jsonSchema.properties) {
-      return z.object({});
+      return {};
     }
+
     const shape: any = {};
     for (const [key, prop] of Object.entries(jsonSchema.properties)) {
+      let fieldSchema: z.ZodTypeAny;
+
       switch ((prop as any).type) {
         case 'string':
-          shape[key] = z.string().describe((prop as any).description || '');
+          fieldSchema = z.string().describe((prop as any).description || '');
           break;
         case 'number':
-          shape[key] = z.number().describe((prop as any).description || '');
+          fieldSchema = z.number().describe((prop as any).description || '');
           break;
         case 'boolean':
-          shape[key] = z.boolean().describe((prop as any).description || '');
+          fieldSchema = z.boolean().describe((prop as any).description || '');
           break;
         case 'array':
-          shape[key] = z.array(z.any()).describe((prop as any).description || '');
+          fieldSchema = z.array(z.any()).describe((prop as any).description || '');
           break;
         case 'object':
-          shape[key] = z
+          fieldSchema = z
             .object({})
             .passthrough()
             .describe((prop as any).description || '');
           break;
         default:
-          shape[key] = z.any();
+          fieldSchema = z.any();
       }
+
       if (!jsonSchema.required || !jsonSchema.required.includes(key)) {
-        shape[key] = shape[key].optional();
+        shape[key] = fieldSchema.optional();
+      } else {
+        shape[key] = fieldSchema;
       }
     }
-    return z.object(shape);
+    return shape; // 直接返回 shape 对象
   }
 
   private convertGcliResultToMcpResult(
