@@ -178,45 +178,56 @@ export class GcliMcpBridge {
   }
   
   private convertJsonSchemaToZod(jsonSchema: any): any {
-    // 如果没有 schema 或 properties，返回一个空的 shape 对象
+    // Helper to convert a single JSON schema property to a Zod type.
+    // This is defined as an inner arrow function to recursively call itself for arrays
+    // and to call the outer function for nested objects via `this`.
+    const convertProperty = (prop: any): z.ZodTypeAny => {
+      if (!prop || !prop.type) {
+        return z.any();
+      }
+
+      switch (prop.type) {
+        case 'string':
+          return z.string().describe(prop.description || '');
+        case 'number':
+          return z.number().describe(prop.description || '');
+        case 'boolean':
+          return z.boolean().describe(prop.description || '');
+        case 'array':
+          // This is the key fix: recursively call the converter for `items`.
+          if (!prop.items) {
+            // A valid array schema MUST have `items`. Fallback to `any` if missing.
+            return z.array(z.any()).describe(prop.description || '');
+          }
+          return z
+            .array(convertProperty(prop.items))
+            .describe(prop.description || '');
+        case 'object':
+          // For nested objects, recursively call the main function to get the shape.
+          return z
+            .object(this.convertJsonSchemaToZod(prop))
+            .passthrough()
+            .describe(prop.description || '');
+        default:
+          return z.any();
+      }
+    };
+
+    // If no schema or properties, return an empty shape object.
     if (!jsonSchema || !jsonSchema.properties) {
       return {};
     }
 
     const shape: any = {};
     for (const [key, prop] of Object.entries(jsonSchema.properties)) {
-      let fieldSchema: z.ZodTypeAny;
-
-      switch ((prop as any).type) {
-        case 'string':
-          fieldSchema = z.string().describe((prop as any).description || '');
-          break;
-        case 'number':
-          fieldSchema = z.number().describe((prop as any).description || '');
-          break;
-        case 'boolean':
-          fieldSchema = z.boolean().describe((prop as any).description || '');
-          break;
-        case 'array':
-          fieldSchema = z.array(z.any()).describe((prop as any).description || '');
-          break;
-        case 'object':
-          fieldSchema = z
-            .object({})
-            .passthrough()
-            .describe((prop as any).description || '');
-          break;
-        default:
-          fieldSchema = z.any();
-      }
+      let fieldSchema = convertProperty(prop as any);
 
       if (!jsonSchema.required || !jsonSchema.required.includes(key)) {
-        shape[key] = fieldSchema.optional();
-      } else {
-        shape[key] = fieldSchema;
+        fieldSchema = fieldSchema.optional();
       }
+      shape[key] = fieldSchema;
     }
-    return shape; // 直接返回 shape 对象
+    return shape; // Directly return the shape object.
   }
 
   private convertGcliResultToMcpResult(
