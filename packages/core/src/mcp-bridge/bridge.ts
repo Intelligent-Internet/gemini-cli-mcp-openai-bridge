@@ -3,9 +3,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { type Config } from '../config/config.js';
-import { type Tool, type ToolResult } from '../tools/tools.js';
+import { type Tool as GcliTool, type ToolResult } from '../tools/tools.js';
 import { type CallToolResult, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { type Part, type PartUnion } from '@google/genai';
+import {
+  type Part,
+  type PartUnion,
+  type PartListUnion,
+  type Tool,
+} from '@google/genai';
 import { randomUUID } from 'node:crypto';
 
 const LOG_PREFIX = '[MCP SERVER]';
@@ -124,7 +129,7 @@ export class GcliMcpBridge {
     this.registerGeminiApiTool();
   }
 
-  private registerGcliTool(tool: Tool) {
+  private registerGcliTool(tool: GcliTool) {
     const inputSchema = this.convertJsonSchemaToZod(tool.schema.parameters);
 
     this.mcpServer.registerTool(
@@ -147,16 +152,46 @@ export class GcliMcpBridge {
       {
         title: 'Gemini API Proxy',
         description:
-          "Proxies a request to the Gemini API through the CLI's authenticated client.",
+          "Proxies a request to the Gemini API through the CLI's authenticated client. Allows dynamic provision of tools and a system prompt for this call.",
         inputSchema: {
-          messages: z.any(),
+          messages: z
+            .any()
+            .describe(
+              'The conversation history or prompt to send to the Gemini API.',
+            ),
+          tools: z
+            .array(z.any())
+            .optional()
+            .describe(
+              'An array of tool definitions (FunctionDeclarations) to make available to the model for this call.',
+            ),
+          systemInstruction: z
+            .string()
+            .optional()
+            .describe(
+              "A system prompt to guide the model's behavior for this call.",
+            ),
         },
       },
-      async (args, { sendNotification }) => {
+      async (args, { sendNotification, signal }) => {
+        const { messages, tools, systemInstruction } = args as {
+          messages: PartListUnion;
+          tools?: Tool[];
+          systemInstruction?: string;
+        };
+
         const geminiClient = this.config.getGeminiClient();
+
+        // Pass the dynamic tools and system prompt in the config for this specific call
         const stream = await geminiClient.sendMessageStream(
-          (args as { messages: any }).messages,
-          new AbortController().signal,
+          {
+            message: messages,
+            config: {
+              tools: tools,
+              systemInstruction: systemInstruction,
+            },
+          },
+          signal, // Use the signal from the MCP request
         );
 
         let fullTextResponse = '';
@@ -168,6 +203,8 @@ export class GcliMcpBridge {
               params: { level: 'info', data: `[STREAM_CHUNK]${event.value}` },
             });
           }
+          // Note: Tool call events from the proxied call are not currently forwarded.
+          // This could be a future enhancement if needed.
         }
 
         return {
