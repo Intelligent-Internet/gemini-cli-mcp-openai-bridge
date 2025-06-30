@@ -10,9 +10,10 @@ import {
   type PartUnion,
   type PartListUnion,
   type Tool,
+  type GenerateContentConfig,
 } from '@google/genai';
 import { randomUUID } from 'node:crypto';
-import { type GeminiCodeRequest as GeminiRequest } from '../core/geminiRequest.js';
+import { GeminiChat } from '../core/geminiChat.js';
 
 const LOG_PREFIX = '[MCP SERVER]';
 
@@ -181,20 +182,35 @@ export class GcliMcpBridge {
           systemInstruction?: string;
         };
 
-        const geminiClient = this.config.getGeminiClient();
+        const contentGenerator = this.config
+          .getGeminiClient()
+          .getContentGenerator();
 
-        // Pass the dynamic tools and system prompt in the config for this specific call
-        const stream = await geminiClient.sendMessageStream(
-          messages,
-          signal, // Use the signal from the MCP request
-          {
-            tools: tools,
-            systemInstruction: systemInstruction,
-          },
+        // 1. Prepare the generation config with dynamic tools and system prompt.
+        const generationConfig: GenerateContentConfig = {
+          tools: tools,
+          systemInstruction: systemInstruction,
+        };
+
+        // 2. Create a new, stateless GeminiChat instance for this single call.
+        const oneShotChat = new GeminiChat(
+          this.config,
+          contentGenerator,
+          generationConfig, // Pass dynamic config here
+          [], // Start with an empty history
         );
+
+        // 3. Call sendMessageStream on the new instance.
+        const stream = await oneShotChat.sendMessageStream({
+          message: messages,
+        });
 
         let fullTextResponse = '';
         for await (const event of stream) {
+          if (signal.aborted) {
+            console.log(`${LOG_PREFIX} 🛑 Request was aborted by the client.`);
+            break;
+          }
           if (event.type === 'content' && event.value) {
             fullTextResponse += event.value;
             await sendNotification({
