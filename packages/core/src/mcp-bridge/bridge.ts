@@ -1,70 +1,114 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { type Config } from '../config/config.js';
 import { type Tool, type ToolResult } from '../tools/tools.js';
-import { type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { type CallToolResult, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { type Part, type PartUnion } from '@google/genai';
-// import { FunctionDeclarationSchema } from '@google/genai'; // 假设这个类型可以从 genai SDK 导入
+import { randomUUID } from 'node:crypto';
+
+const LOG_PREFIX = '[MCP SERVER]';
+
+// NEW: 日志中间件
+const requestLogger = (req: Request, res: Response, next: NextFunction) => {
+  console.log(`${LOG_PREFIX} ⬇️  Incoming Request: ${req.method} ${req.url}`);
+  console.log(`${LOG_PREFIX}    Headers:`, JSON.stringify(req.headers, null, 2));
+  if (req.body && Object.keys(req.body).length > 0) {
+      const bodyStr = JSON.stringify(req.body);
+      console.log(`${LOG_PREFIX}    Body:`, bodyStr.length > 300 ? bodyStr.substring(0, 300) + '...' : bodyStr);
+  }
+  next();
+};
 
 export class GcliMcpBridge {
-  private readonly mcpServer: McpServer;
   private readonly config: Config;
+  private readonly cliVersion: string;
 
   constructor(config: Config, cliVersion: string) {
     this.config = config;
-    this.mcpServer = new McpServer(
-      {
-        name: 'gemini-cli-mcp-server',
-        version: cliVersion,
-      },
-      {
-        capabilities: { tools: {} },
-      },
-    );
+    this.cliVersion = cliVersion;
   }
 
   public async start(port: number) {
-    await this.registerAllGcliTools();
-
     const app = express();
     app.use(express.json());
+    
+    // NEW: 使用日志中间件
+    app.use(requestLogger);
 
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // Stateless mode
-    });
+    const transports: Record<string, StreamableHTTPServerTransport> = {};
 
-    await this.mcpServer.connect(transport);
+    app.all('/mcp', async (req: Request, res: Response) => {
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-    app.all('/mcp', (req, res) => {
-      transport.handleRequest(req, res, req.body);
+      let transport: StreamableHTTPServerTransport;
+
+      if (sessionId && transports[sessionId]) {
+        console.log(`${LOG_PREFIX}  reusing transport for session: ${sessionId}`);
+        transport = transports[sessionId];
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        console.log(`${LOG_PREFIX} creating new transport for initialize request.`);
+        
+        const mcpServer = new McpServer({
+            name: 'gemini-cli-mcp-server',
+            version: this.cliVersion,
+        }, { capabilities: { tools: { listChanged: true } } });
+
+        const toolRegistry = await this.config.getToolRegistry();
+        const allTools = toolRegistry.getAllTools();
+        for (const tool of allTools) {
+            this.registerGcliTool(mcpServer, tool);
+        }
+        this.registerGeminiApiTool(mcpServer);
+
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (newSessionId) => {
+            console.log(`${LOG_PREFIX} ✅ Session initialized with ID: ${newSessionId}`);
+            transports[newSessionId] = transport;
+          },
+        });
+        
+        transport.onclose = () => {
+            const sid = transport.sessionId;
+            if (sid && transports[sid]) {
+                console.log(`${LOG_PREFIX} 🚪 Transport for session ${sid} closed.`);
+                delete transports[sid];
+            }
+        };
+
+        await mcpServer.connect(transport);
+      } else {
+        console.error(`${LOG_PREFIX} ❌ Bad Request: Missing or invalid session ID for non-initialize request.`);
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: Missing or invalid session ID.' },
+          id: null,
+        });
+        return;
+      }
+
+      try {
+          await transport.handleRequest(req, res, req.body);
+      } catch (e) {
+          console.error(`${LOG_PREFIX} 💥 Error handling request:`, e);
+          if (!res.headersSent) {
+              res.status(500).end();
+          }
+      }
     });
 
     app.listen(port, () => {
-      console.log(`MCP transport listening on http://localhost:${port}/mcp`);
+      console.log(`${LOG_PREFIX} 🎧 MCP transport listening on http://localhost:${port}/mcp`);
     });
   }
 
-  private async registerAllGcliTools() {
-    // 调用我们即将添加的新方法
-    const toolRegistry = await this.config.getToolRegistry();
-    const allTools = toolRegistry.getAllTools();
-
-    // 注册普通工具
-    for (const tool of allTools) {
-      this.registerGcliTool(tool);
-    }
-
-    // 注册特殊的 LLM 代理工具
-    this.registerGeminiApiTool();
-  }
-
-  private registerGcliTool(tool: Tool) {
-    // 这里需要一个健壮的转换器
+  // ... a partir de aquí, el resto de los métodos de GcliMcpBridge permanecen igual ...
+  private registerGcliTool(mcpServer: McpServer, tool: Tool) {
     const inputSchema = this.convertJsonSchemaToZod(tool.schema.parameters);
 
-    this.mcpServer.registerTool(
+    mcpServer.registerTool(
       tool.name,
       {
         title: tool.displayName,
@@ -72,16 +116,14 @@ export class GcliMcpBridge {
         inputSchema: inputSchema,
       },
       async (args, extra) => {
-        // 注意：GCLI 的工具执行可能需要 AbortSignal，我们需要从 extra 中获取
         const result = await tool.execute(args, extra.signal);
         return this.convertGcliResultToMcpResult(result);
       },
     );
   }
 
-  private registerGeminiApiTool() {
-    // ... (与原方案中的实现相同) ...
-    this.mcpServer.registerTool(
+  private registerGeminiApiTool(mcpServer: McpServer) {
+    mcpServer.registerTool(
       'call_gemini_api',
       {
         title: 'Gemini API Proxy',
@@ -89,7 +131,6 @@ export class GcliMcpBridge {
           "Proxies a request to the Gemini API through the CLI's authenticated client.",
         inputSchema: {
           messages: z.any(),
-          // ... 其他 LLM 参数
         },
       },
       async (args, { sendNotification }) => {
@@ -116,7 +157,7 @@ export class GcliMcpBridge {
       },
     );
   }
-
+  
   private convertJsonSchemaToZod(jsonSchema: any): any {
     if (!jsonSchema || !jsonSchema.properties) {
       return z.object({});
@@ -133,7 +174,6 @@ export class GcliMcpBridge {
         case 'boolean':
           shape[key] = z.boolean().describe((prop as any).description || '');
           break;
-        // 添加对 array 和 object 的基本支持
         case 'array':
           shape[key] = z.array(z.any()).describe((prop as any).description || '');
           break;
@@ -164,7 +204,6 @@ export class GcliMcpBridge {
       ? gcliResult.llmContent
       : [gcliResult.llmContent];
 
-    // PartUnion[] -> ContentBlock[]
     const contentBlocks = parts.map((part: PartUnion) => {
       if (typeof part === 'string') {
         return { type: 'text' as const, text: part };
@@ -172,11 +211,9 @@ export class GcliMcpBridge {
       if ('text' in part && part.text) {
         return { type: 'text' as const, text: part.text };
       }
-      // 需要更详细的转换逻辑来处理其他 Part 类型
       return { type: 'text' as const, text: '[Unsupported Part Type]' };
     });
 
     return { content: contentBlocks };
   }
-
 }
