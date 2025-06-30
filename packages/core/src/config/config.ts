@@ -260,6 +260,10 @@ export class Config {
     // Note: In the future, we may want to reset any cached state when switching auth methods
   }
 
+  getCliVersion(): string {
+    return this.cliVersion;
+  }
+
   getSessionId(): string {
     return this.sessionId;
   }
