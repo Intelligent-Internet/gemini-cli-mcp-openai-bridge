@@ -12,6 +12,7 @@ import {
   type Tool,
   type GenerateContentConfig,
   type GenerateContentResponse,
+  type Content,
 } from '@google/genai';
 import { randomUUID } from 'node:crypto';
 import { GeminiChat } from '../core/geminiChat.js';
@@ -178,7 +179,7 @@ export class GcliMcpBridge {
       },
       async (args, { sendNotification, signal }) => {
         const { messages, tools, systemInstruction } = args as {
-          messages: PartListUnion;
+          messages: Content[];
           tools?: Tool[];
           systemInstruction?: string;
         };
@@ -193,17 +194,32 @@ export class GcliMcpBridge {
           systemInstruction: systemInstruction,
         };
 
+        // The history for the one-shot chat is all messages except the last one.
+        const history = messages.slice(0, -1);
+        // The new prompt is the parts from the last message.
+        const lastMessage = messages[messages.length - 1];
+        const newPrompt = lastMessage?.parts;
+
+        if (!newPrompt) {
+          // This should ideally return a proper JSON-RPC error.
+          // For now, we'll let it proceed, which will likely fail downstream
+          // in sendMessageStream if `newPrompt` is undefined.
+          console.error(
+            `${LOG_PREFIX} ❌ Invalid 'call_gemini_api' arguments: 'messages' array is empty or last message has no parts.`,
+          );
+        }
+
         // 2. Create a new, stateless GeminiChat instance for this single call.
         const oneShotChat = new GeminiChat(
           this.config,
           contentGenerator,
           generationConfig, // Pass dynamic config here
-          [], // Start with an empty history
+          history, // Start with the provided history
         );
 
         // 3. Call sendMessageStream on the new instance.
         const stream = await oneShotChat.sendMessageStream({
-          message: messages,
+          message: newPrompt || [], // Pass only the parts of the new message
         });
 
         let fullTextResponse = '';
