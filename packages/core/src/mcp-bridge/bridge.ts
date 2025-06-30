@@ -43,7 +43,7 @@ export class GcliMcpBridge {
         name: 'gemini-cli-mcp-server',
         version: this.cliVersion,
       },
-      { capabilities: { tools: { listChanged: true }, logging: true } },
+      { capabilities: { tools: { listChanged: true }, logging: {} } },
     );
   }
 
