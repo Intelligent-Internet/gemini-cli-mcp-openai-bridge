@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { type Config } from '../config/config.js';
 import { type Tool, type ToolResult } from '../tools/tools.js';
 import { type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { type Part } from '@google/genai';
+import { type Part, type PartUnion } from '@google/genai';
 // import { FunctionDeclarationSchema } from '@google/genai'; // 假设这个类型可以从 genai SDK 导入
 
 export class GcliMcpBridge {
@@ -165,8 +165,11 @@ export class GcliMcpBridge {
       ? gcliResult.llmContent
       : [gcliResult.llmContent];
 
-    // Part[] -> ContentBlock[]
-    const contentBlocks = parts.map((part: Part) => {
+    // PartUnion[] -> ContentBlock[]
+    const contentBlocks = parts.map((part: PartUnion) => {
+      if (typeof part === 'string') {
+        return { type: 'text' as const, text: part };
+      }
       if ('text' in part && part.text) {
         return { type: 'text' as const, text: part.text };
       }
