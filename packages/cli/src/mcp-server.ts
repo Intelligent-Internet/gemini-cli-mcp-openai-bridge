@@ -8,6 +8,7 @@ import {
   DEFAULT_GEMINI_MODEL,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   MCPServerConfig,
+  AuthType,
 } from '@google/gemini-cli-core';
 import { loadSettings, Settings } from './config/settings.js';
 import { loadExtensions, Extension } from './config/extension.js';
@@ -114,6 +115,17 @@ async function startMcpServer() {
       process.env.http_proxy,
     bugCommand: settings.merged.bugCommand,
   });
+
+  // Initialize Auth - this is critical to initialize the tool registry and gemini client
+  let selectedAuthType = settings.merged.selectedAuthType;
+  if (!selectedAuthType && !process.env.GEMINI_API_KEY) {
+    console.error(
+      'Auth missing: Please set `selectedAuthType` in .gemini/settings.json or set the GEMINI_API_KEY environment variable.',
+    );
+    process.exit(1);
+  }
+  selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
+  await config.refreshAuth(selectedAuthType);
 
   // 4. 初始化并启动 MCP 桥接服务
   const mcpBridge = new GcliMcpBridge(config, cliVersion);
