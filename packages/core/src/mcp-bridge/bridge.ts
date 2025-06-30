@@ -3,8 +3,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { type Config } from '../config/config.js';
-import { type Tool, type ToolResult } from '../tools/tools.js';
-import { type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { type Tool as GcliTool, type ToolResult } from '../tools/tools.js';
+import {
+  type CallToolResult,
+  ListToolsRequestSchema,
+  type ListToolsResult,
+  type Tool as McpTool,
+} from '@modelcontextprotocol/sdk/types.js';
 import { type Part, type PartUnion } from '@google/genai';
 // import { FunctionDeclarationSchema } from '@google/genai'; // 假设这个类型可以从 genai SDK 导入
 
@@ -27,6 +32,7 @@ export class GcliMcpBridge {
 
   public async start(port: number) {
     await this.registerAllGcliTools();
+    this.registerRequestHandlers();
 
     const app = express();
     app.use(express.json());
@@ -49,7 +55,7 @@ export class GcliMcpBridge {
   private async registerAllGcliTools() {
     // 调用我们即将添加的新方法
     const toolRegistry = await this.config.getToolRegistry();
-    const allTools = await toolRegistry.getAllTools();
+    const allTools = toolRegistry.getAllTools();
 
     // 注册普通工具
     for (const tool of allTools) {
@@ -60,7 +66,7 @@ export class GcliMcpBridge {
     this.registerGeminiApiTool();
   }
 
-  private registerGcliTool(tool: Tool) {
+  private registerGcliTool(tool: GcliTool) {
     // 这里需要一个健壮的转换器
     const inputSchema = this.convertJsonSchemaToZod(tool.schema.parameters);
 
@@ -177,5 +183,66 @@ export class GcliMcpBridge {
     });
 
     return { content: contentBlocks };
+  }
+
+  private registerRequestHandlers() {
+    this.mcpServer.setRequestHandler(
+      ListToolsRequestSchema,
+      async (): Promise<ListToolsResult> => {
+        const toolRegistry = await this.config.getToolRegistry();
+        const allGcliTools = toolRegistry.getAllTools();
+
+        const mcpTools: McpTool[] = allGcliTools.map((gcliTool) =>
+          this.convertGcliToolToMcpTool(gcliTool),
+        );
+
+        // 别忘了把我们的超级工具也加进去
+        mcpTools.push(this.getGeminiApiToolDefinition());
+
+        return { tools: mcpTools };
+      },
+    );
+  }
+
+  /**
+   * 新增：将 GCLI 的内部 Tool 格式转换为 MCP 标准的 Tool 格式
+   */
+  private convertGcliToolToMcpTool(gcliTool: GcliTool): McpTool {
+    return {
+      name: gcliTool.name,
+      title: gcliTool.displayName, // 使用 displayName 作为 title
+      description: gcliTool.description,
+      // GCLI 的 schema.parameters 就是一个 JSON Schema 对象，可以直接使用
+      inputSchema: gcliTool.schema.parameters as McpTool['inputSchema'],
+      // GCLI 工具目前没有定义 outputSchema，所以这里是 undefined
+      outputSchema: undefined,
+    };
+  }
+
+  /**
+   * 新增：为 call_gemini_api 超级工具提供一个独立的定义
+   */
+  private getGeminiApiToolDefinition(): McpTool {
+    return {
+      name: 'call_gemini_api',
+      title: 'Gemini API Proxy',
+      description:
+        "Proxies a request to the Gemini API through the CLI's authenticated client.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          messages: {
+            type: 'array',
+            description: 'The conversation history.',
+          },
+          model: { type: 'string', description: 'Optional model to use.' },
+          temperature: {
+            type: 'number',
+            description: 'Optional temperature.',
+          },
+        },
+        required: ['messages'],
+      },
+    };
   }
 }
