@@ -1,7 +1,12 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { ListToolsResultSchema, type Notification } from '@modelcontextprotocol/sdk/types.js'; // <--- 引入 Notification 类型
+import {
+  ListToolsResultSchema,
+  type Notification,
+  TextContentBlockSchema,
+} from '@modelcontextprotocol/sdk/types.js'; // <--- 引入 Notification 类型
 import { URL } from 'url';
+import { z } from 'zod';
 
 // --- 配置 ---
 const SERVER_URL = 'http://localhost:8282/mcp';
@@ -94,8 +99,14 @@ async function runTestClient() {
         logWithPrefix(`  ${index + 1}. Name: ${tool.name}`);
         logWithPrefix(`     Title: ${tool.title || 'N/A'}`);
         logWithPrefix(`     Description: ${tool.description || 'N/A'}`);
-        logWithPrefix(`     Input Schema:`, JSON.stringify(tool.inputSchema, null, 2));
+        logWithPrefix(
+          `     Input Schema:`,
+          JSON.stringify(tool.inputSchema, null, 2),
+        );
       });
+
+      // New test case for call_gemini_api
+      await testGeminiApiCall(client);
     } else {
       logWithPrefix('⚠️ Server returned an empty list of tools.');
     }
@@ -106,6 +117,41 @@ async function runTestClient() {
     await client.close();
     logWithPrefix('🚪 Connection closed. Test finished.');
   }
+}
+
+async function testGeminiApiCall(client: Client) {
+  logWithPrefix('-----------------------------------');
+  logWithPrefix('🚀 Testing "call_gemini_api" tool...');
+
+  try {
+    const result = await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'call_gemini_api',
+          arguments: {
+            messages: [{ role: 'user', parts: [{ text: 'Why is the sky blue?' }] }],
+          },
+        },
+      },
+      z.object({ content: z.array(TextContentBlockSchema) }),
+    );
+
+    logWithPrefix('✅ Successfully received response from call_gemini_api!');
+    const responseText = result.content[0]?.text || '';
+    logWithPrefix('   Response Text:', responseText.substring(0, 100) + '...');
+
+    if (responseText.toLowerCase().includes('scattering')) {
+      logWithPrefix('✅ Validation successful: Response contains "scattering".');
+    } else {
+      console.error(
+        `${LOG_PREFIX} ❌ Validation failed: Response did not contain "scattering".`,
+      );
+    }
+  } catch (error) {
+    console.error(`${LOG_PREFIX} ❌ Failed to call call_gemini_api:`, error);
+  }
+  logWithPrefix('-----------------------------------');
 }
 
 runTestClient().catch((error) => {
