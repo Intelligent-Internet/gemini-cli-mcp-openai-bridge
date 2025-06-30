@@ -24,16 +24,26 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 export class GcliMcpBridge {
   private readonly config: Config;
   private readonly cliVersion: string;
+  private readonly mcpServer: McpServer;
 
   constructor(config: Config, cliVersion: string) {
     this.config = config;
     this.cliVersion = cliVersion;
+    this.mcpServer = new McpServer(
+      {
+        name: 'gemini-cli-mcp-server',
+        version: this.cliVersion,
+      },
+      { capabilities: { tools: { listChanged: true } } },
+    );
   }
 
   public async start(port: number) {
+    await this.registerAllGcliTools();
+
     const app = express();
     app.use(express.json());
-    
+
     // NEW: 使用日志中间件
     app.use(requestLogger);
 
@@ -41,74 +51,83 @@ export class GcliMcpBridge {
 
     app.all('/mcp', async (req: Request, res: Response) => {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
+      let transport = sessionId ? transports[sessionId] : undefined;
 
-      let transport: StreamableHTTPServerTransport;
+      if (!transport) {
+        if (isInitializeRequest(req.body)) {
+          console.log(
+            `${LOG_PREFIX} creating new transport for initialize request.`,
+          );
+          transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+            onsessioninitialized: (newSessionId) => {
+              console.log(
+                `${LOG_PREFIX} ✅ Session initialized with ID: ${newSessionId}`,
+              );
+              transports[newSessionId] = transport!;
+            },
+          });
 
-      if (sessionId && transports[sessionId]) {
-        console.log(`${LOG_PREFIX}  reusing transport for session: ${sessionId}`);
-        transport = transports[sessionId];
-      } else if (!sessionId && isInitializeRequest(req.body)) {
-        console.log(`${LOG_PREFIX} creating new transport for initialize request.`);
-        
-        const mcpServer = new McpServer({
-            name: 'gemini-cli-mcp-server',
-            version: this.cliVersion,
-        }, { capabilities: { tools: { listChanged: true } } });
-
-        const toolRegistry = await this.config.getToolRegistry();
-        const allTools = toolRegistry.getAllTools();
-        for (const tool of allTools) {
-            this.registerGcliTool(mcpServer, tool);
-        }
-        this.registerGeminiApiTool(mcpServer);
-
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (newSessionId) => {
-            console.log(`${LOG_PREFIX} ✅ Session initialized with ID: ${newSessionId}`);
-            transports[newSessionId] = transport;
-          },
-        });
-        
-        transport.onclose = () => {
-            const sid = transport.sessionId;
+          transport.onclose = () => {
+            const sid = transport!.sessionId;
             if (sid && transports[sid]) {
-                console.log(`${LOG_PREFIX} 🚪 Transport for session ${sid} closed.`);
-                delete transports[sid];
+              console.log(
+                `${LOG_PREFIX} 🚪 Transport for session ${sid} closed.`,
+              );
+              delete transports[sid];
             }
-        };
+          };
 
-        await mcpServer.connect(transport);
+          // Connect the new transport to the *existing* McpServer
+          await this.mcpServer.connect(transport);
+        } else {
+          console.error(
+            `${LOG_PREFIX} ❌ Bad Request: Missing or invalid session ID for non-initialize request.`,
+          );
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Bad Request: Missing or invalid session ID.',
+            },
+            id: null,
+          });
+          return;
+        }
       } else {
-        console.error(`${LOG_PREFIX} ❌ Bad Request: Missing or invalid session ID for non-initialize request.`);
-        res.status(400).json({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Bad Request: Missing or invalid session ID.' },
-          id: null,
-        });
-        return;
+        console.log(`${LOG_PREFIX}  reusing transport for session: ${sessionId}`);
       }
 
       try {
-          await transport.handleRequest(req, res, req.body);
+        await transport.handleRequest(req, res, req.body);
       } catch (e) {
-          console.error(`${LOG_PREFIX} 💥 Error handling request:`, e);
-          if (!res.headersSent) {
-              res.status(500).end();
-          }
+        console.error(`${LOG_PREFIX} 💥 Error handling request:`, e);
+        if (!res.headersSent) {
+          res.status(500).end();
+        }
       }
     });
 
     app.listen(port, () => {
-      console.log(`${LOG_PREFIX} 🎧 MCP transport listening on http://localhost:${port}/mcp`);
+      console.log(
+        `${LOG_PREFIX} 🎧 MCP transport listening on http://localhost:${port}/mcp`,
+      );
     });
   }
 
-  // ... a partir de aquí, el resto de los métodos de GcliMcpBridge permanecen igual ...
-  private registerGcliTool(mcpServer: McpServer, tool: Tool) {
+  private async registerAllGcliTools() {
+    const toolRegistry = await this.config.getToolRegistry();
+    const allTools = toolRegistry.getAllTools();
+    for (const tool of allTools) {
+      this.registerGcliTool(tool);
+    }
+    this.registerGeminiApiTool();
+  }
+
+  private registerGcliTool(tool: Tool) {
     const inputSchema = this.convertJsonSchemaToZod(tool.schema.parameters);
 
-    mcpServer.registerTool(
+    this.mcpServer.registerTool(
       tool.name,
       {
         title: tool.displayName,
@@ -122,8 +141,8 @@ export class GcliMcpBridge {
     );
   }
 
-  private registerGeminiApiTool(mcpServer: McpServer) {
-    mcpServer.registerTool(
+  private registerGeminiApiTool() {
+    this.mcpServer.registerTool(
       'call_gemini_api',
       {
         title: 'Gemini API Proxy',
