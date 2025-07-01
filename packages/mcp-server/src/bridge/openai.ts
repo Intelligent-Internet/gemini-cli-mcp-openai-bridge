@@ -27,7 +27,8 @@ export function createOpenAIRouter(config: Config): Router {
       const stream = body.stream !== false;
 
       if (!body.messages || body.messages.length === 0) {
-        return res.status(400).json({ error: 'messages is required' });
+        res.status(400).json({ error: 'messages is required' });
+        return;
       }
 
       // 将 OpenAI 格式的 messages 转换为 Gemini 格式
@@ -39,7 +40,8 @@ export function createOpenAIRouter(config: Config): Router {
 
       const lastMessage = history.pop();
       if (!lastMessage) {
-        return res.status(400).json({ error: 'No message to send.' });
+        res.status(400).json({ error: 'No message to send.' });
+        return;
       }
 
       try {
@@ -58,7 +60,7 @@ export function createOpenAIRouter(config: Config): Router {
           res.flushHeaders(); // 立即发送头信息
 
           const geminiStream = await oneShotChat.sendMessageStream({
-            message: lastMessage.parts,
+            message: lastMessage.parts || [],
           });
           const openAIStream = createOpenAIStreamTransformer(body.model);
 
@@ -83,7 +85,7 @@ export function createOpenAIRouter(config: Config): Router {
         } else {
           // --- 非流式响应（为了完整性） ---
           const result = await oneShotChat.sendMessage({
-            message: lastMessage.parts,
+            message: lastMessage.parts || [],
           });
           const responseText =
             result.candidates?.[0]?.content?.parts?.[0]?.text || '';

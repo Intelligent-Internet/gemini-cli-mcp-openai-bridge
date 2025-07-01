@@ -18,15 +18,6 @@ import {
   loadEnvironment,
   loadSandboxConfig,
 } from '@google/gemini-cli/public-api';
-import {
-  loadSettings,
-  type Settings,
-  loadExtensions,
-  type Extension,
-  getCliVersion,
-  loadEnvironment,
-  loadSandboxConfig,
-} from '@google/gemini-cli/public-api';
 import { GcliMcpBridge } from './bridge/bridge.js';
 import { createOpenAIRouter } from './bridge/openai.js';
 import express from 'express';
@@ -130,17 +121,6 @@ async function startMcpServer() {
       process.env.http_proxy,
     bugCommand: settings.merged.bugCommand,
   });
-
-  // Initialize Auth - this is critical to initialize the tool registry and gemini client
-  let selectedAuthType = settings.merged.selectedAuthType;
-  if (!selectedAuthType && !process.env.GEMINI_API_KEY) {
-    console.error(
-      'Auth missing: Please set `selectedAuthType` in .gemini/settings.json or set the GEMINI_API_KEY environment variable.',
-    );
-    process.exit(1);
-  }
-  selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
-  await config.refreshAuth(selectedAuthType);
 
   // Initialize Auth - this is critical to initialize the tool registry and gemini client
   let selectedAuthType = settings.merged.selectedAuthType;
