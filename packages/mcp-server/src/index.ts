@@ -132,6 +132,7 @@ async function startMcpServer() {
   }
   selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
   await config.refreshAuth(selectedAuthType);
+  console.log(`Using authentication method: ${selectedAuthType}`);
 
   // 4. 初始化并启动 MCP 桥接服务 和 OpenAI 服务
   const mcpBridge = new GcliMcpBridge(config, cliVersion);
