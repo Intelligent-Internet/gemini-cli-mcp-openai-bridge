@@ -5,9 +5,12 @@
   "repository": "google-gemini/gemini-cli",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./public-api": "./dist/src/public-api.js"
+  },
   "bin": {
-    "gemini": "dist/index.js",
-    "gemini-mcp-server": "dist/src/mcp-server.js"
+    "gemini": "dist/index.js"
   },
   "scripts": {
     "build": "node ../../scripts/build_package.js",
@@ -36,7 +39,6 @@
     "command-exists": "^1.2.9",
     "diff": "^7.0.0",
     "dotenv": "^16.6.1",
-    "express": "^5.1.0",
     "gaxios": "^6.1.1",
     "glob": "^10.4.1",
     "highlight.js": "^11.11.1",

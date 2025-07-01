@@ -1,0 +1,38 @@
+{
+  "name": "@google/gemini-mcp-server",
+  "version": "0.1.8",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "gemini-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "clean": "rm -rf dist",
+    "start": "node dist/index.js",
+    "debug": "node --inspect-brk dist/index.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prerelease:version": "node ../../scripts/bind_package_version.js",
+    "prerelease:deps": "node ../../scripts/bind_package_dependencies.js",
+    "prepack": "npm run build",
+    "prepublishOnly": "node ../../scripts/prepublish.js"
+  },
+  "dependencies": {
+    "@google/gemini-cli-core": "*",
+    "@google/gemini-cli": "*",
+    "express": "^5.1.0",
+    "@modelcontextprotocol/sdk": "^1.13.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "typescript": "^5.3.3",
+    "vitest": "^3.1.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

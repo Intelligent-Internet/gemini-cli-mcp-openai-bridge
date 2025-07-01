@@ -35,7 +35,6 @@
     "@types/html-to-text": "^9.0.4",
     "diff": "^7.0.0",
     "dotenv": "^16.6.1",
-    "express": "^5.1.0",
     "gaxios": "^6.1.1",
     "glob": "^10.4.5",
     "google-auth-library": "^9.11.0",
@@ -47,13 +46,11 @@
     "simple-git": "^3.28.0",
     "strip-ansi": "^7.1.0",
     "undici": "^7.10.0",
-    "ws": "^8.18.0",
-    "zod": "^3.23.8"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/diff": "^7.0.2",
     "@types/dotenv": "^6.1.1",
-    "@types/express": "^5.0.3",
     "@types/micromatch": "^4.0.8",
     "@types/minimatch": "^5.1.2",
     "@types/ws": "^8.5.10",
