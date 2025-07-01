@@ -14,7 +14,7 @@ const TextContentBlockSchema = z.object({
 });
 
 // --- 配置 ---
-const SERVER_URL = 'http://localhost:8282/mcp';
+const SERVER_URL = 'http://localhost:8765/mcp';
 const LOG_PREFIX = '[TEST CLIENT]';
 // -------------
 
