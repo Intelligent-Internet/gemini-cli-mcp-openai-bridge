@@ -6,6 +6,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'; // <--- 引入 Notification 类型
 import { URL } from 'url';
 import { z } from 'zod';
+import OpenAI from 'openai';
 
 // Define the schema for a text content block, as it's not exported by the SDK.
 const TextContentBlockSchema = z.object({
@@ -137,46 +138,49 @@ async function runTestClient() {
           JSON.stringify(tool.inputSchema, null, 2),
         );
       });
-
-      // New test case for call_gemini_api
-      await testGeminiApiCall(client);
     } else {
       logWithPrefix('⚠️ Server returned an empty list of tools.');
     }
   } catch (error) {
     console.error(`${LOG_PREFIX} ❌ Failed to list tools:`, error);
   } finally {
-    logWithPrefix('👋 Closing connection...');
+    logWithPrefix('👋 Closing MCP connection...');
     await client.close();
-    logWithPrefix('🚪 Connection closed. Test finished.');
+    logWithPrefix('🚪 MCP Connection closed.');
   }
+
+  // Now, test the OpenAI endpoint
+  await testOpenAIEndpoint();
+
+  logWithPrefix('✅ Test finished.');
 }
 
-async function testGeminiApiCall(client: Client) {
+async function testOpenAIEndpoint() {
   logWithPrefix('-----------------------------------');
-  logWithPrefix('🚀 Testing "call_gemini_api" tool...');
+  logWithPrefix('🚀 Testing OpenAI compatible endpoint...');
+
+  const openai = new OpenAI({
+    baseURL: 'http://localhost:8765/v1',
+    apiKey: 'not-needed', // The API key is not used by our local server
+  });
 
   try {
-    const result = await client.request(
-      {
-        method: 'tools/call',
-        params: {
-          name: 'call_gemini_api',
-          arguments: {
-            messages: [
-              { role: 'user', parts: [{ text: 'Why is the sky blue?' }] },
-            ],
-          },
-        },
-      },
-      z.object({ content: z.array(TextContentBlockSchema) }),
-    );
+    const stream = await openai.chat.completions.create({
+      model: 'gemini-pro', // This can be any string, it's passed to the transformer
+      messages: [{ role: 'user', content: 'Why is the sky blue?' }],
+      stream: true,
+    });
 
-    logWithPrefix('✅ Successfully received response from call_gemini_api!');
-    const responseText = result.content[0]?.text || '';
-    logWithPrefix('   Response Text:', responseText.substring(0, 100) + '...');
+    let fullResponse = '';
+    logWithPrefix('✅ Stream opened. Receiving response...');
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      fullResponse += content;
+      process.stdout.write(content);
+    }
+    console.log(''); // Newline after stream
 
-    if (responseText.toLowerCase().includes('scattering')) {
+    if (fullResponse.toLowerCase().includes('scattering')) {
       logWithPrefix('✅ Validation successful: Response contains "scattering".');
     } else {
       console.error(
@@ -184,7 +188,10 @@ async function testGeminiApiCall(client: Client) {
       );
     }
   } catch (error) {
-    console.error(`${LOG_PREFIX} ❌ Failed to call call_gemini_api:`, error);
+    console.error(
+      `${LOG_PREFIX} ❌ Failed to call OpenAI endpoint:`,
+      error,
+    );
   }
   logWithPrefix('-----------------------------------');
 }

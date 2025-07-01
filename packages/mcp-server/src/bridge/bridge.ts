@@ -129,7 +129,6 @@ export class GcliMcpBridge {
     for (const tool of allTools) {
       this.registerGcliTool(tool);
     }
-    this.registerGeminiApiTool();
   }
 
   private registerGcliTool(tool: GcliTool) {
@@ -149,111 +148,6 @@ export class GcliMcpBridge {
     );
   }
 
-  private registerGeminiApiTool() {
-    this.mcpServer.registerTool(
-      'call_gemini_api',
-      {
-        title: 'Gemini API Proxy',
-        description:
-          "Proxies a request to the Gemini API through the CLI's authenticated client. Allows dynamic provision of tools and a system prompt for this call.",
-        inputSchema: {
-          messages: z
-            .any()
-            .describe(
-              'The conversation history or prompt to send to the Gemini API.',
-            ),
-          tools: z
-            .array(z.any())
-            .optional()
-            .describe(
-              'An array of tool definitions (FunctionDeclarations) to make available to the model for this call.',
-            ),
-          systemInstruction: z
-            .string()
-            .optional()
-            .describe(
-              "A system prompt to guide the model's behavior for this call.",
-            ),
-        },
-      },
-      async (args, { sendNotification, signal }) => {
-        const { messages, tools, systemInstruction } = args as {
-          messages: Content[];
-          tools?: Tool[];
-          systemInstruction?: string;
-        };
-
-        const contentGenerator = this.config
-          .getGeminiClient()
-          .getContentGenerator();
-
-        // 1. Prepare the generation config with dynamic tools and system prompt.
-        const generationConfig: GenerateContentConfig = {
-          tools: tools,
-          systemInstruction: systemInstruction,
-        };
-
-        // The history for the one-shot chat is all messages except the last one.
-        const history = messages.slice(0, -1);
-        // The new prompt is the parts from the last message.
-        const lastMessage = messages[messages.length - 1];
-        const newPrompt = lastMessage?.parts;
-
-        if (!newPrompt) {
-          // This should ideally return a proper JSON-RPC error.
-          // For now, we'll let it proceed, which will likely fail downstream
-          // in sendMessageStream if `newPrompt` is undefined.
-          console.error(
-            `${LOG_PREFIX} ❌ Invalid 'call_gemini_api' arguments: 'messages' array is empty or last message has no parts.`,
-          );
-        }
-
-        // 2. Create a new, stateless GeminiChat instance for this single call.
-        const oneShotChat = new GeminiChat(
-          this.config,
-          contentGenerator,
-          generationConfig, // Pass dynamic config here
-          history, // Start with the provided history
-        );
-
-        // 3. Call sendMessageStream on the new instance.
-        const stream = await oneShotChat.sendMessageStream({
-          message: newPrompt || [], // Pass only the parts of the new message
-        });
-
-        let fullTextResponse = '';
-        for await (const event of stream) {
-          if (signal.aborted) {
-            console.log(`${LOG_PREFIX} 🛑 Request was aborted by the client.`);
-            break;
-          }
-          let chunkText = '';
-          if (event.candidates && event.candidates.length > 0) {
-            const parts = event.candidates[0].content?.parts || [];
-            for (const part of parts) {
-              if (part.text) {
-                chunkText += part.text;
-              }
-            }
-          }
-
-          if (chunkText) {
-            fullTextResponse += chunkText;
-            await sendNotification({
-              method: 'notifications/message',
-              params: { level: 'info', data: `[STREAM_CHUNK]${chunkText}` },
-            });
-          }
-          // Note: Tool call events from the proxied call are not currently forwarded.
-          // This could be a future enhancement if needed.
-        }
-
-        return {
-          content: [{ type: 'text', text: fullTextResponse }],
-        };
-      },
-    );
-  }
 
   private convertJsonSchemaToZod(jsonSchema: any): any {
     // Helper to convert a single JSON schema property to a Zod type.
