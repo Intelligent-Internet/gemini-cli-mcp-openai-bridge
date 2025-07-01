@@ -18,7 +18,18 @@ import {
   loadEnvironment,
   loadSandboxConfig,
 } from '@google/gemini-cli/public-api';
+import {
+  loadSettings,
+  type Settings,
+  loadExtensions,
+  type Extension,
+  getCliVersion,
+  loadEnvironment,
+  loadSandboxConfig,
+} from '@google/gemini-cli/public-api';
 import { GcliMcpBridge } from './bridge/bridge.js';
+import { createOpenAIRouter } from './bridge/openai.js';
+import express from 'express';
 
 // Simple console logger for now
 const logger = {
@@ -131,11 +142,39 @@ async function startMcpServer() {
   selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
   await config.refreshAuth(selectedAuthType);
 
-  // 4. 初始化并启动 MCP 桥接服务
-  const mcpBridge = new GcliMcpBridge(config, cliVersion);
-  await mcpBridge.start(port);
+  // Initialize Auth - this is critical to initialize the tool registry and gemini client
+  let selectedAuthType = settings.merged.selectedAuthType;
+  if (!selectedAuthType && !process.env.GEMINI_API_KEY) {
+    console.error(
+      'Auth missing: Please set `selectedAuthType` in .gemini/settings.json or set the GEMINI_API_KEY environment variable.',
+    );
+    process.exit(1);
+  }
+  selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
+  await config.refreshAuth(selectedAuthType);
 
-  console.log(`Gemini CLI MCP Bridge is running on port ${port}`);
+  // 4. 初始化并启动 MCP 桥接服务 和 OpenAI 服务
+  const mcpBridge = new GcliMcpBridge(config, cliVersion);
+
+  const app = express();
+  app.use(express.json());
+
+  // 启动 MCP 服务 (这是 GcliMcpBridge 的一部分，我们需要把它集成到主 app 中)
+  await mcpBridge.start(app); // 修改 start 方法以接收 express app 实例
+
+  // 启动 OpenAI 兼容端点
+  const openAIRouter = createOpenAIRouter(config);
+  app.use('/v1', openAIRouter);
+
+  app.listen(port, () => {
+    console.log(
+      `🚀 Gemini CLI MCP Server and OpenAI Bridge are running on port ${port}`,
+    );
+    console.log(`   - MCP transport listening on http://localhost:${port}/mcp`);
+    console.log(
+      `   - OpenAI-compatible endpoints available at http://localhost:${port}/v1`,
+    );
+  });
 }
 
 startMcpServer().catch(error => {

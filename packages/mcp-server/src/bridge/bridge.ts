@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction, Application } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -53,11 +53,8 @@ export class GcliMcpBridge {
     );
   }
 
-  public async start(port: number) {
+  public async start(app: Application) {
     await this.registerAllGcliTools();
-
-    const app = express();
-    app.use(express.json());
 
     // NEW: 使用日志中间件
     app.use(requestLogger);
@@ -123,12 +120,6 @@ export class GcliMcpBridge {
           res.status(500).end();
         }
       }
-    });
-
-    app.listen(port, () => {
-      console.log(
-        `${LOG_PREFIX} 🎧 MCP transport listening on http://localhost:${port}/mcp`,
-      );
     });
   }
 
