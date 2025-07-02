@@ -1,6 +1,6 @@
-# Gemini CLI - MCP / OpenAI Bridge Server (`@google/gemini-mcp-server`)
+# Gemini CLI - MCP / OpenAI Bridge Server (`@gemini-community/gemini-mcp-server`)
 
-`@google/gemini-mcp-server` is a versatile companion application designed to serve as a powerful extension for the `gemini-cli` ecosystem. It primarily fulfills two core roles:
+`@gemini-community/gemini-mcp-server` is a versatile companion application designed to serve as a powerful extension for the `gemini-cli` ecosystem. It primarily fulfills two core roles:
 
 1.  **MCP (Model-Context Protocol) Server**: It hosts and exposes `gemini-cli`'s powerful built-in tools (e.g., `google_web_search`, file system tools) via a standard, discoverable protocol. This allows the core `gemini-cli` model to invoke these tools as needed.
 
@@ -83,7 +83,7 @@ From the root of the `gemini-cli` project, ensure all dependencies are installed
 ```bash
 # From the project root
 npm install
-npm run build --workspace=@google/gemini-mcp-server
+npm run build --workspace=@gemini-community/gemini-mcp-server
 ```
 
 ### 2. Starting the Server
@@ -92,13 +92,13 @@ You can start the server using the `npm run start` command from the root directo
 
 ```bash
 # Start the server with default configuration
-npm run start --workspace=@google/gemini-mcp-server
+npm run start --workspace=@gemini-community/gemini-mcp-server
 
 # Start on a different port with debug mode enabled
-npm run start --workspace=@google/gemini-mcp-server -- --port=9000 --debug
+npm run start --workspace=@gemini-community/gemini-mcp-server -- --port=9000 --debug
 
 # Use a faster model for tool calls
-GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@google/gemini-mcp-server
+GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
 ```
 
 When the server starts successfully, you will see output similar to this:
@@ -142,7 +142,7 @@ curl http://localhost:8765/v1/chat/completions \
 
 ### Telemetry
 
-The `@google/gemini-mcp-server` **does not introduce any new telemetry or data collection mechanisms**.
+The `@gemini-community/gemini-mcp-server` **does not introduce any new telemetry or data collection mechanisms**.
 
 It relies entirely on the OpenTelemetry (OTEL) system built into the `@google/gemini-cli-core` package. Therefore, all telemetry data (if enabled) will follow the main `gemini-cli` configuration and be sent to the destination specified in your `settings.json` file.
 
@@ -150,24 +150,24 @@ For details on how to configure and use telemetry, please refer to the [main Gem
 
 ### Terms of Service and Privacy Notice
 
-Your use of this server is governed by the Terms of Service and Privacy Policies corresponding to the `gemini-cli` account type you are using for authentication. As a bridge, `@google/gemini-mcp-server` does not collect, store, or process any additional data of its own.
+Your use of this server is governed by the Terms of Service and Privacy Policies corresponding to the `gemini-cli` account type you are using for authentication. As a bridge, `@gemini-community/gemini-mcp-server` does not collect, store, or process any additional data of its own.
 
 We strongly recommend you review the [main Gemini CLI Terms of Service and Privacy Notice documentation](../../docs/tos-privacy.md) for details applicable to your account.
 
 ---
 
-### Developer Note: Regarding the package name `@google/gemini-mcp-server`
+### Developer Note: Regarding the package name `@gemini-community/gemini-mcp-server`
 
-Please note that the name of this package, `@google/gemini-mcp-server`, reflects its origin as an internal component of the official `google-gemini/gemini-cli` monorepo.
+Please note that the name of this package, `@gemini-community/gemini-mcp-server`, indicates that it is a community-maintained package.
 
--   **Internal Naming**: This naming is consistent internally within the source code and workspaces of the `gemini-cli` project.
--   **Not for Independent Publication**: This package is **not intended to be published independently** to a public npm registry. If you fork this project and wish to publish your modified version, you **must** change the package name to your own scope (e.g., `@your-username/gemini-mcp-server`) to comply with npm's package naming policies and to avoid confusion.
+-   **Community Driven**: This package is part of the Gemini Community effort to extend the capabilities of `gemini-cli`.
+-   **Publication**: This package may be published to a public npm registry under the `@gemini-community` scope. If you fork this project and wish to publish your own modified version, you **must** change the package name to your own scope (e.g., `@your-username/gemini-mcp-server`) to comply with npm's package naming policies and to avoid confusion.
 
 ----
 
-# Gemini CLI - MCP / OpenAI Bridge Server (`@google/gemini-mcp-server`)
+# Gemini CLI - MCP / OpenAI Bridge Server (`@gemini-community/gemini-mcp-server`)
 
-`@google/gemini-mcp-server` 是一个多功能的服务器应用程序，旨在作为 `gemini-cli` 生态系统的强大扩展。它主要承担两个核心角色：
+`@gemini-community/gemini-mcp-server` 是一个多功能的服务器应用程序，旨在作为 `gemini-cli` 生态系统的强大扩展。它主要承担两个核心角色：
 
 1.  **MCP (Model-Context Protocol) 服务器**: 它为 `gemini-cli` 托管和暴露了一系列强大的内置工具（例如 `google_web_search`），允许 `gemini-cli` 的核心模型通过一个标准的、可发现的协议来调用这些工具。
 
@@ -239,7 +239,7 @@ Please note that the name of this package, `@google/gemini-mcp-server`, reflects
 ```bash
 # 在项目根目录运行
 npm install
-npm run build --workspace=@google/gemini-mcp-server
+npm run build --workspace=@gemini-community/gemini-mcp-server
 ```
 
 ### 2. 启动服务器
@@ -248,13 +248,13 @@ npm run build --workspace=@google/gemini-mcp-server
 
 ```bash
 # 启动服务器，使用默认配置
-npm run start --workspace=@google/gemini-mcp-server
+npm run start --workspace=@gemini-community/gemini-mcp-server
 
 # 在不同端口上启动，并启用调试模式
-npm run start --workspace=@google/gemini-mcp-server -- --port=9000 --debug
+npm run start --workspace=@gemini-community/gemini-mcp-server -- --port=9000 --debug
 
 # 使用一个更快的模型进行工具调用
-GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@google/gemini-mcp-server
+GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
 ```
 
 服务器成功启动后，您将看到类似以下的输出：
