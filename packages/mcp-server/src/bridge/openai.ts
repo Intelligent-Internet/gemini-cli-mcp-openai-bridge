@@ -1,126 +1,74 @@
 import { Router, Request, Response } from 'express';
-import { type Config, GeminiChat } from '@google/gemini-cli-core';
+import { type Config } from '@google/gemini-cli-core';
 import { createOpenAIStreamTransformer } from './stream-transformer.js';
-import { type Content } from '@google/genai';
 import { WritableStream } from 'node:stream/web';
-import { randomUUID } from 'node:crypto';
-
-// 定义 OpenAI 请求体的接口
-interface OpenAIChatCompletionRequest {
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  stream?: boolean;
-}
+import { GeminiApiClient } from './gemini-client.js'; // <-- 引入新类
+import { type OpenAIChatCompletionRequest } from './types.js'; // <-- 引入新类型
 
 export function createOpenAIRouter(config: Config): Router {
   const router = Router();
-  // 注意：基于 bridge.ts 的现有代码，我们假设 getGeminiClient 和 getContentGenerator 方法存在。
-  const contentGenerator = config.getGeminiClient().getContentGenerator();
 
-  // OpenAI chat completions 端点
-  router.post(
-    '/chat/completions',
-    async (req: Request, res: Response) => {
+  router.post('/chat/completions', async (req: Request, res: Response) => {
+    try {
       const body = req.body as OpenAIChatCompletionRequest;
-
-      // 确保 stream 默认为 true，除非显式设置为 false
       const stream = body.stream !== false;
 
-      if (!body.messages || body.messages.length === 0) {
-        res.status(400).json({ error: 'messages is required' });
-        return;
+      if (!stream) {
+        // 非流式响应逻辑可以稍后实现，或直接返回错误
+        return res
+          .status(501)
+          .json({ error: 'Non-streaming responses are not yet implemented.' });
       }
 
-      // 将 OpenAI 格式的 messages 转换为 Gemini 格式
-      // 注意：这里简化了处理，实际可能需要处理 system prompt 等
-      const history: Content[] = body.messages.map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }],
-      }));
+      // --- 流式响应 ---
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
 
-      const lastMessage = history.pop();
-      if (!lastMessage) {
-        res.status(400).json({ error: 'No message to send.' });
-        return;
+      // 1. 使用新的 GeminiApiClient
+      const client = new GeminiApiClient(config);
+
+      // 2. 发起请求，传递所有相关参数
+      const geminiStream = await client.sendMessageStream({
+        model: body.model,
+        messages: body.messages,
+        tools: body.tools,
+        tool_choice: body.tool_choice,
+      });
+
+      // 3. 创建转换器和写入器
+      const openAIStream = createOpenAIStreamTransformer(body.model);
+      const writer = new WritableStream({
+        write(chunk) {
+          res.write(chunk);
+        },
+      });
+
+      // 4. 创建 ReadableStream 并通过管道连接
+      const readableStream = new ReadableStream({
+        async start(controller) {
+          for await (const value of geminiStream) {
+            controller.enqueue(value);
+          }
+          controller.close();
+        },
+      });
+
+      await readableStream.pipeThrough(openAIStream).pipeTo(writer);
+      res.end();
+    } catch (error) {
+      console.error('[OpenAI Bridge] Error:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'An unknown error occurred';
+      if (!res.headersSent) {
+        res.status(500).json({ error: errorMessage });
+      } else {
+        res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
+        res.end();
       }
-
-      try {
-        const oneShotChat = new GeminiChat(
-          config,
-          contentGenerator,
-          {}, // generationConfig
-          history,
-        );
-
-        if (stream) {
-          // --- 流式响应 ---
-          res.setHeader('Content-Type', 'text/event-stream');
-          res.setHeader('Cache-Control', 'no-cache');
-          res.setHeader('Connection', 'keep-alive');
-          res.flushHeaders(); // 立即发送头信息
-
-          const geminiStream = await oneShotChat.sendMessageStream({
-            message: lastMessage.parts || [],
-          });
-          const openAIStream = createOpenAIStreamTransformer(body.model);
-
-          const writer = new WritableStream({
-            write(chunk) {
-              res.write(chunk);
-            },
-          });
-
-          const readableStream = new ReadableStream({
-            async start(controller) {
-              for await (const value of geminiStream) {
-                controller.enqueue(value);
-              }
-              controller.close();
-            },
-          });
-
-          await readableStream.pipeThrough(openAIStream).pipeTo(writer);
-
-          res.end();
-        } else {
-          // --- 非流式响应（为了完整性） ---
-          const result = await oneShotChat.sendMessage({
-            message: lastMessage.parts || [],
-          });
-          const responseText =
-            result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-          res.json({
-            id: `chatcmpl-${randomUUID()}`,
-            object: 'chat.completion',
-            created: Math.floor(Date.now() / 1000),
-            model: body.model,
-            choices: [
-              {
-                index: 0,
-                message: {
-                  role: 'assistant',
-                  content: responseText,
-                },
-                finish_reason: 'stop',
-              },
-            ],
-          });
-        }
-      } catch (error) {
-        console.error('[OpenAI Bridge] Error:', error);
-        const errorMessage =
-          error instanceof Error ? error.message : 'An unknown error occurred';
-        if (!res.headersSent) {
-          res.status(500).json({ error: errorMessage });
-        } else {
-          // 如果头已发送，只能尝试写入错误信息并结束流
-          res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
-          res.end();
-        }
-      }
-    },
-  );
+    }
+  });
 
   // 可以添加 /v1/models 端点
   router.get('/models', (req, res) => {

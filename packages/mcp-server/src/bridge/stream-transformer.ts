@@ -1,9 +1,19 @@
 import { GenerateContentResponse } from '@google/genai';
+import { randomUUID } from 'node:crypto';
 
-// 定义 OpenAI 流式响应的块结构
+// --- 更新的 OpenAI 响应结构接口 ---
 interface OpenAIDelta {
-  role?: 'user' | 'assistant' | 'system';
-  content?: string;
+  role?: 'assistant';
+  content?: string | null;
+  tool_calls?: {
+    index: number;
+    id: string;
+    type: 'function';
+    function: {
+      name?: string;
+      arguments?: string;
+    };
+  }[];
 }
 
 interface OpenAIChoice {
@@ -20,49 +30,97 @@ interface OpenAIChunk {
   choices: OpenAIChoice[];
 }
 
-/**
- * 创建一个 TransformStream，将 Gemini 的流式响应块转换为 OpenAI 兼容的 SSE 事件。
- * @param model - 正在使用的模型名称，用于填充 OpenAI 响应。
- * @returns 一个 TransformStream 实例。
- */
+// --- 更新的转换器 ---
 export function createOpenAIStreamTransformer(
   model: string,
 ): TransformStream<GenerateContentResponse, Uint8Array> {
-  const chatID = `chatcmpl-${crypto.randomUUID()}`;
+  const chatID = `chatcmpl-${randomUUID()}`;
   const creationTime = Math.floor(Date.now() / 1000);
   const encoder = new TextEncoder();
   let isFirstChunk = true;
 
   return new TransformStream({
     transform(chunk, controller) {
-      const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) {
-        return;
+      const parts = chunk.candidates?.[0]?.content?.parts || [];
+      const finishReason = chunk.candidates?.[0]?.finishReason;
+
+      let hasContent = false;
+
+      for (const part of parts) {
+        const delta: OpenAIDelta = {};
+
+        if (isFirstChunk) {
+          delta.role = 'assistant';
+          isFirstChunk = false;
+        }
+
+        if (part.text) {
+          delta.content = part.text;
+          hasContent = true;
+        }
+
+        if (part.functionCall) {
+          const fc = part.functionCall;
+          const callId = `call_${randomUUID()}`; // 为每个调用生成一个唯一的ID
+
+          // OpenAI的流式工具调用是分块的，我们这里简化为一次性发送
+          // Gemini通常也是一次性返回一个完整的functionCall
+          delta.tool_calls = [
+            {
+              index: 0, // 假设只有一个工具调用
+              id: callId,
+              type: 'function',
+              function: {
+                name: fc.name,
+                arguments: JSON.stringify(fc.args), // 参数必须是字符串
+              },
+            },
+          ];
+          hasContent = true;
+        }
+
+        if (hasContent) {
+          const openAIChunk: OpenAIChunk = {
+            id: chatID,
+            object: 'chat.completion.chunk',
+            created: creationTime,
+            model: model,
+            choices: [
+              {
+                index: 0,
+                delta: delta,
+                finish_reason: null,
+              },
+            ],
+          };
+          const sseString = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+          controller.enqueue(encoder.encode(sseString));
+        }
       }
 
-      const delta: OpenAIDelta = { content: text };
-      if (isFirstChunk) {
-        delta.role = 'assistant';
-        isFirstChunk = false;
+      // 如果有 finishReason，发送一个带有 finish_reason 的块
+      if (
+        finishReason &&
+        finishReason !== 'FINISH_REASON_UNSPECIFIED' &&
+        finishReason !== 'NOT_SET'
+      ) {
+        const finishDelta: OpenAIDelta = {};
+        const openAIChunk: OpenAIChunk = {
+          id: chatID,
+          object: 'chat.completion.chunk',
+          created: creationTime,
+          model: model,
+          choices: [
+            {
+              index: 0,
+              delta: finishDelta,
+              finish_reason: finishReason === 'STOP' ? 'stop' : 'tool_calls',
+            },
+          ],
+        };
+        const sseString = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+        controller.enqueue(encoder.encode(sseString));
       }
-
-      const openAIChunk: OpenAIChunk = {
-        id: chatID,
-        object: 'chat.completion.chunk',
-        created: creationTime,
-        model: model,
-        choices: [
-          {
-            index: 0,
-            delta: delta,
-            finish_reason: null,
-          },
-        ],
-      };
-
-      // 按照 SSE 格式编码
-      const sseString = `data: ${JSON.stringify(openAIChunk)}\n\n`;
-      controller.enqueue(encoder.encode(sseString));
     },
     flush(controller) {
       // 流结束时，发送 [DONE] 消息
