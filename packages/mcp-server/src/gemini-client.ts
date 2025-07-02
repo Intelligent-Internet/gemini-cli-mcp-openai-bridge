@@ -137,6 +137,14 @@ export class GeminiApiClient {
   }) {
     const history = messages.map(msg => this.openAIMessageToGemini(msg));
     const lastMessage = history.pop();
+    console.log(
+      '[GeminiApiClient] Sending to Gemini. History:',
+      JSON.stringify(history, null, 2),
+    );
+    console.log(
+      '[GeminiApiClient] Last Message:',
+      JSON.stringify(lastMessage, null, 2),
+    );
     if (!lastMessage) {
       throw new Error('No message to send.');
     }
@@ -174,6 +182,7 @@ export class GeminiApiClient {
       },
     });
 
+    console.log('[GeminiApiClient] Got stream from Gemini.');
     return geminiStream;
   }
 }

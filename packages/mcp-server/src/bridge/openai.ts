@@ -11,6 +11,10 @@ export function createOpenAIRouter(config: Config): Router {
   router.post('/chat/completions', async (req: Request, res: Response) => {
     try {
       const body = req.body as OpenAIChatCompletionRequest;
+      console.log(
+        '[OpenAI Bridge] Received /chat/completions request:',
+        JSON.stringify(body, null, 2),
+      );
       const stream = body.stream !== false;
 
       if (!stream) {

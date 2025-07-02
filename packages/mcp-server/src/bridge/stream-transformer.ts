@@ -68,6 +68,10 @@ export function createOpenAIStreamTransformer(
 
   return new TransformStream({
     transform(event: ServerGeminiStreamEvent, controller) {
+      console.log(
+        `[Stream Transformer] Received event: ${event.type}`,
+        event.value ? JSON.stringify(event.value) : '',
+      );
       let delta: OpenAIDelta = {};
 
       if (isFirstChunk) {
