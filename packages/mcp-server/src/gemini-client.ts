@@ -81,10 +81,15 @@ export class GeminiApiClient {
 
       try {
         const parsed = JSON.parse(msg.content as string);
+
         // The Gemini API expects an object for the response.
-        // If the parsed content is a primitive (string, number, boolean),
-        // it must be wrapped in an object.
-        if (typeof parsed === 'object' && parsed !== null) {
+        // If the parsed content is a non-null, non-array object, use it directly.
+        // Otherwise, wrap primitives, arrays, or null in an object.
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          !Array.isArray(parsed)
+        ) {
           responsePayload = parsed as Record<string, unknown>;
         } else {
           responsePayload = { output: parsed };
