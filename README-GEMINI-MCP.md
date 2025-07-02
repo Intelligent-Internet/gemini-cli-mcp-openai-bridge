@@ -76,7 +76,7 @@ You can configure the server's behavior via command-line arguments and environme
     -   **Note**: Command-line argument `--port` takes precedence over this environment variable.
 -   `GEMINI_TOOLS_DEFAULT_MODEL`: Sets a default LLM model specifically for tools hosted by the server (like `google_web_search`).
     -   **Purpose**: When a tool needs to invoke an LLM during its execution (e.g., to summarize search results), it will use the model specified by this variable. This allows you to use a different (potentially faster or cheaper) model for tool execution than for the main chat.
-    -   **Example**: `GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash`
+    -   **Example**: `GEMINI_TOOLS_DEFAULT_MODEL=gemini-2.5-flash`
 
 ## Usage
 
@@ -102,7 +102,7 @@ npm run start --workspace=@gemini-community/gemini-mcp-server
 npm run start --workspace=@gemini-community/gemini-mcp-server -- --port=9000 --debug
 
 # Use a faster model for tool calls
-GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
+GEMINI_TOOLS_DEFAULT_MODEL=gemini-2.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
 
 # Use environment variable to set the port
 GEMINI_MCP_PORT=9000 npm run start --workspace=@gemini-community/gemini-mcp-server
@@ -111,10 +111,19 @@ GEMINI_MCP_PORT=9000 npm run start --workspace=@gemini-community/gemini-mcp-serv
 When the server starts successfully, you will see output similar to this:
 
 ```
-🚀 Gemini CLI MCP Server and OpenAI Bridge are running on port 8765
-   - MCP transport listening on http://localhost:8765/mcp
-   - OpenAI-compatible endpoints available at http://localhost:8765/v1
-⚙️  Using default model for tools: gemini-2.5-pro
+🚀 Starting Gemini CLI MCP Server...
+🚀 Gemini CLI MCP Server running on port 8765
+```
+
+In debug mode (`--debug`), you will see additional information:
+
+```
+🚀 Starting Gemini CLI MCP Server...
+Using authentication method: USE_GEMINI
+Using default model for tools: gemini-2.5-pro
+🚀 Gemini CLI MCP Server running on port 8765
+   - MCP transport: http://localhost:8765/mcp
+   - OpenAI endpoints: http://localhost:8765/v1
 ```
 
 ### 3. Testing the Endpoints
@@ -239,7 +248,7 @@ Please note that the name of this package, `@gemini-community/gemini-mcp-server`
     -   **注意**: 命令行参数 `--port` 的优先级高于此环境变量。
 -   `GEMINI_TOOLS_DEFAULT_MODEL`: 为服务器托管的工具（如 `google_web_search`）设置一个默认的 LLM 模型。
     -   **用途**: 当一个工具在执行过程中需要调用 LLM（例如，对搜索结果进行总结）时，它将使用此环境变量指定的模型。这允许您为主聊天和工具执行使用不同的模型，从而可能优化成本和速度。
-    -   **示例**: `GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash`
+    -   **示例**: `GEMINI_TOOLS_DEFAULT_MODEL=gemini-2.5-flash`
 
 ## 使用方法
 
@@ -265,7 +274,7 @@ npm run start --workspace=@gemini-community/gemini-mcp-server
 npm run start --workspace=@gemini-community/gemini-mcp-server -- --port=9000 --debug
 
 # 使用一个更快的模型进行工具调用
-GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
+GEMINI_TOOLS_DEFAULT_MODEL=gemini-2.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
 
 # 使用环境变量设置端口
 GEMINI_MCP_PORT=9000 npm run start --workspace=@gemini-community/gemini-mcp-server
@@ -274,10 +283,19 @@ GEMINI_MCP_PORT=9000 npm run start --workspace=@gemini-community/gemini-mcp-serv
 服务器成功启动后，您将看到类似以下的输出：
 
 ```
-🚀 Gemini CLI MCP Server and OpenAI Bridge are running on port 8765
-   - MCP transport listening on http://localhost:8765/mcp
-   - OpenAI-compatible endpoints available at http://localhost:8765/v1
-⚙️  Using default model for tools: gemini-2.5-pro
+🚀 Starting Gemini CLI MCP Server...
+🚀 Gemini CLI MCP Server running on port 8765
+```
+
+在调试模式下（`--debug`），您将看到额外的信息：
+
+```
+🚀 Starting Gemini CLI MCP Server...
+Using authentication method: USE_GEMINI
+Using default model for tools: gemini-2.5-pro
+🚀 Gemini CLI MCP Server running on port 8765
+   - MCP transport: http://localhost:8765/mcp
+   - OpenAI endpoints: http://localhost:8765/v1
 ```
 
 ### 3. 测试端点
