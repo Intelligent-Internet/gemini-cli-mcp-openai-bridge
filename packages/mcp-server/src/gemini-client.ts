@@ -21,6 +21,42 @@ import {
   type ReasoningData,
 } from './types.js';
 
+/**
+ * Recursively removes fields from a JSON schema that are not supported by the
+ * Gemini API.
+ * @param schema The JSON schema to sanitize.
+ * @returns A new schema object without the unsupported fields.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sanitizeGeminiSchema(schema: any): any {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  // Create a new object, filtering out unsupported keys at the current level.
+  const newSchema: { [key: string]: any } = {};
+  for (const key in schema) {
+    if (key !== '$schema' && key !== 'additionalProperties') {
+      newSchema[key] = schema[key];
+    }
+  }
+
+  // Recurse into nested 'properties' and 'items'.
+  if (newSchema.properties) {
+    const newProperties: { [key: string]: any } = {};
+    for (const key in newSchema.properties) {
+      newProperties[key] = sanitizeGeminiSchema(newSchema.properties[key]);
+    }
+    newSchema.properties = newProperties;
+  }
+
+  if (newSchema.items) {
+    newSchema.items = sanitizeGeminiSchema(newSchema.items);
+  }
+
+  return newSchema;
+}
+
 export class GeminiApiClient {
   private readonly config: Config;
   private readonly contentGenerator;
@@ -42,11 +78,16 @@ export class GeminiApiClient {
 
     const functionDeclarations: FunctionDeclaration[] = openAITools
       .filter(tool => tool.type === 'function' && tool.function)
-      .map(tool => ({
-        name: tool.function.name,
-        description: tool.function.description,
-        parameters: tool.function.parameters,
-      }));
+      .map(tool => {
+        const sanitizedParameters = sanitizeGeminiSchema(
+          tool.function.parameters,
+        );
+        return {
+          name: tool.function.name,
+          description: tool.function.description,
+          parameters: sanitizedParameters,
+        };
+      });
 
     if (functionDeclarations.length === 0) {
       return undefined;
