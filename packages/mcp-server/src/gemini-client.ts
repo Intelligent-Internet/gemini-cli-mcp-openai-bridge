@@ -77,25 +77,31 @@ export class GeminiApiClient {
 
     if (msg.role === 'tool') {
       const functionName = this.parseFunctionNameFromId(msg.tool_call_id || '');
-      let responsePayload: object;
+      let responsePayload: Record<string, unknown>;
 
       try {
-        // 尝试将工具返回的内容解析为 JSON 对象
-        responsePayload = JSON.parse(msg.content as string);
+        const parsed = JSON.parse(msg.content as string);
+        // The Gemini API expects an object for the response.
+        // If the parsed content is a primitive (string, number, boolean),
+        // it must be wrapped in an object.
+        if (typeof parsed === 'object' && parsed !== null) {
+          responsePayload = parsed as Record<string, unknown>;
+        } else {
+          responsePayload = { output: parsed };
+        }
       } catch (e) {
-        // 如果解析失败，说明工具返回的可能是一个简单的字符串
-        // 在这种情况下，我们遵循 Gemini API 的惯例，将其包装在 { "output": "..." } 中
+        // If parsing fails, it's a plain string. Wrap it.
         responsePayload = { output: msg.content };
       }
 
       return {
-        role: 'user', // Gemini 使用 'user' role 来承载 functionResponse
+        role: 'user', // Gemini uses 'user' role to hold a functionResponse
         parts: [
           {
             functionResponse: {
               id: msg.tool_call_id,
               name: functionName,
-              // 直接将解析后的对象或包装后的对象作为 response 的值
+              // Pass the parsed or wrapped object as the response value.
               response: responsePayload,
             },
           },
