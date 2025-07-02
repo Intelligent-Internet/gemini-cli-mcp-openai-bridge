@@ -6,8 +6,7 @@
   "type": "module",
   "main": "dist/index.js",
   "exports": {
-    ".": "./dist/index.js",
-    "./public-api": "./dist/src/public-api.js"
+    ".": "./dist/index.js"
   },
   "bin": {
     "gemini": "dist/index.js"

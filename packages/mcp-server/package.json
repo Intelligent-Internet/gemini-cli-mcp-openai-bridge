@@ -1,5 +1,5 @@
 {
-  "name": "@google/gemini-mcp-server",
+  "name": "@gemini-community/gemini-mcp-server",
   "version": "0.1.8",
   "type": "module",
   "main": "dist/index.js",
@@ -21,11 +21,14 @@
     "prepublishOnly": "node ../../scripts/prepublish.js"
   },
   "dependencies": {
-    "@google/gemini-cli": "*",
     "@google/gemini-cli-core": "*",
     "@modelcontextprotocol/sdk": "^1.13.2",
+    "command-exists": "^1.2.9",
+    "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "openai": "^5.8.2",
+    "read-package-up": "^11.0.0",
+    "strip-json-comments": "^3.1.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

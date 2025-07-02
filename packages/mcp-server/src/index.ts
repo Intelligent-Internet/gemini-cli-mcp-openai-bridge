@@ -9,15 +9,10 @@ import {
   MCPServerConfig,
   AuthType,
 } from '@google/gemini-cli-core';
-import {
-  loadSettings,
-  type Settings,
-  loadExtensions,
-  type Extension,
-  getCliVersion,
-  loadEnvironment,
-  loadSandboxConfig,
-} from '@google/gemini-cli/public-api';
+import { loadSettings, type Settings } from './config/settings.js';
+import { loadExtensions, type Extension } from './config/extension.js';
+import { getCliVersion } from './utils/version.js';
+import { loadServerConfig } from './config/config.js';
 import { GcliMcpBridge } from './bridge/bridge.js';
 import { createOpenAIRouter } from './bridge/openai.js';
 import express from 'express';
@@ -66,61 +61,17 @@ async function startMcpServer() {
   console.log('Starting Gemini CLI in MCP Server Mode...');
 
   // 2. 复用配置加载的核心部分，但手动构造 Config
-  loadEnvironment(); // 加载 .env 文件
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
   const extensions = loadExtensions(workspaceRoot);
   const cliVersion = await getCliVersion();
 
-  // 3. 手动构造 ConfigParameters，绕开 yargs
-  const fileDiscoveryService = new FileDiscoveryService(workspaceRoot);
-  const extensionContextFilePaths = extensions.flatMap(e => e.contextFiles);
-  const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
-    workspaceRoot,
-    debugMode,
-    fileDiscoveryService,
-    extensionContextFilePaths,
-  );
-
-  const mockArgvForSandbox = {};
-  const sandboxConfig = await loadSandboxConfig(
+  const config = await loadServerConfig(
     settings.merged,
-    mockArgvForSandbox,
+    extensions,
+    sessionId,
+    debugMode,
   );
-
-  const mcpServers = mergeMcpServers(settings.merged, extensions);
-
-  const config = new Config({
-    sessionId: sessionId,
-    model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
-    embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
-    targetDir: workspaceRoot,
-    cwd: workspaceRoot,
-    debugMode: debugMode,
-    approvalMode: ApprovalMode.YOLO, // 强制为 YOLO 模式
-    sandbox: sandboxConfig,
-    userMemory: memoryContent,
-    geminiMdFileCount: fileCount,
-    fileDiscoveryService,
-    coreTools: settings.merged.coreTools,
-    excludeTools: settings.merged.excludeTools,
-    toolDiscoveryCommand: settings.merged.toolDiscoveryCommand,
-    toolCallCommand: settings.merged.toolCallCommand,
-    mcpServers: mcpServers,
-    extensionContextFilePaths,
-    showMemoryUsage: settings.merged.showMemoryUsage,
-    accessibility: settings.merged.accessibility,
-    telemetry: settings.merged.telemetry,
-    usageStatisticsEnabled: settings.merged.usageStatisticsEnabled,
-    fileFiltering: settings.merged.fileFiltering,
-    checkpointing: settings.merged.checkpointing?.enabled,
-    proxy:
-      process.env.HTTPS_PROXY ||
-      process.env.https_proxy ||
-      process.env.HTTP_PROXY ||
-      process.env.http_proxy,
-    bugCommand: settings.merged.bugCommand,
-  });
 
   // Initialize Auth - this is critical to initialize the tool registry and gemini client
   let selectedAuthType = settings.merged.selectedAuthType;
