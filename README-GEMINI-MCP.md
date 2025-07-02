@@ -1,10 +1,169 @@
-好的，这是为您准备的一份详细的 `README.md` 文件。
+# Gemini CLI - MCP / OpenAI Bridge Server (`@google/gemini-mcp-server`)
 
-它涵盖了 `mcp-server` 的设计理念、架构、与 `gemini-cli` 生态系统的交互、认证机制、配置选项，并特别强调了您要求的关于最小化修改、遥测和隐私声明的要点。
+`@google/gemini-mcp-server` is a versatile companion application designed to serve as a powerful extension for the `gemini-cli` ecosystem. It primarily fulfills two core roles:
 
-您可以将此内容保存为 `packages/mcp-server/README.md`。
+1.  **MCP (Model-Context Protocol) Server**: It hosts and exposes `gemini-cli`'s powerful built-in tools (e.g., `google_web_search`, file system tools) via a standard, discoverable protocol. This allows the core `gemini-cli` model to invoke these tools as needed.
+
+2.  **OpenAI-Compatible API Bridge**: It provides an endpoint compatible with the OpenAI Chat Completions API. This enables any third-party tool or application that supports the OpenAI API (such as [Open WebUI](https://github.com/open-webui/open-webui)) to seamlessly interact with the underlying Gemini model of `gemini-cli`, including full support for streaming responses.
+
+## Core Design Philosophy
+
+The server is built on a principle of **minimal modification and maximum reuse**. It is not a reimplementation of `gemini-cli`'s features but is instead intelligently built on top of the `@google/gemini-cli-core` package.
+
+By reusing the `Config` and `GeminiClient` classes from the core package, the `mcp-server` inherits all of the essential business logic, tool execution capabilities, and configuration management of the main CLI. This design ensures behavioral consistency and simplifies maintenance and extension.
+
+## Features
+
+-   **Hosts Native `gemini-cli` Tools**: Exposes the built-in tools (file system operations, web fetching, web search, etc.) to the `gemini-cli` model via the MCP protocol.
+-   **OpenAI API Compatibility**: Provides `/v1/chat/completions` and `/v1/models` endpoints, allowing third-party applications to interact with the Gemini model as if it were an OpenAI service.
+-   **Streaming Support**: Fully supports streaming responses, pushing real-time generation results from the Gemini model to the client via Server-Sent Events (SSE).
+-   **Flexible Model Configuration**: Allows a separate, default LLM model to be configured via an environment variable specifically for tools hosted by the server (e.g., for summarizing search results).
+-   **Inherited Configuration & Authentication**: Automatically uses the same settings and authentication state as your main `gemini-cli` setup.
+-   **Forced YOLO Mode**: Runs in a permanent "YOLO" mode, automatically approving all tool calls for streamlined, non-interactive use by other applications.
+
+## Architecture & Interaction Flow
+
+The `mcp-server` operates as a standalone component within the `gemini-cli` ecosystem with the following interaction flow:
+
+1.  **Configuration Loading**: On startup, the server loads user and workspace `settings.json` files and reads environment variables, just like the main `gemini-cli` application, to initialize an instance of the `@google/gemini-cli-core` `Config` class.
+2.  **Authentication**: The server **does not** handle its own authentication. It relies entirely on the established authentication state of `gemini-cli` (see the next section for details).
+3.  **MCP Service**: It starts an MCP server, which the `gemini-cli` can connect to when it needs to discover and execute tools.
+4.  **OpenAI Bridge**: It starts an Express web server that listens for API requests in the OpenAI format.
+5.  **Request Handling**:
+    -   When an OpenAI-formatted request is received, the server converts it into a format that `gemini-cli-core` can understand.
+    -   It uses the reused `Config` instance to get a `GeminiClient`.
+    -   A **new, isolated `GeminiChat` session** is created for each incoming API request to prevent conversation history from leaking between different clients.
+    -   The request is sent to the Gemini API via the `GeminiClient`.
+    -   If the Gemini API's response is streaming, the server transforms it into an OpenAI-compatible SSE stream; otherwise, it returns a complete JSON response.
+
+## Authentication Mechanism
+
+Crucially, the `mcp-server` **does not manage its own credentials**. It shares the exact same authentication mechanism as the main `gemini-cli` tool to ensure seamless and secure operation.
+
+The source of authentication credentials follows the identical priority and lookup logic as `gemini-cli`:
+
+-   **Cached Credentials**: If you have previously logged in through the interactive `gemini-cli` flow (e.g., `gcloud auth application-default login` or OAuth web login), the `mcp-server` will automatically use the cached credentials stored in `~/.config/gcloud` or `~/.gemini`.
+-   **Environment Variables**: The server will look for and use standard Google Cloud and Gemini environment variables, such as:
+    -   `GEMINI_API_KEY`
+    -   `GOOGLE_APPLICATION_CREDENTIALS`
+    -   `GOOGLE_CLOUD_PROJECT`
+
+This means that as long as your `gemini-cli` itself is configured correctly and works, the `mcp-server` will be authorized automatically, with no extra authentication steps required.
+
+## Important Security Note: YOLO Mode
+
+The `mcp-server` is designed for non-interactive, programmatic use. As such, it runs with a permanent **YOLO (You Only Live Once) Mode** enabled (`approvalMode: ApprovalMode.YOLO`).
+
+This means that any tool call requested by the model (e.g., `run_shell_command`, `replace`) will be **executed immediately without user confirmation**.
+
+**Warning:** Be extremely cautious when exposing this server to a network. Any client that can reach the server will be able to execute tools with the same permissions as the user running the server process.
+
+## Configuration Options
+
+You can configure the server's behavior via command-line arguments and environment variables.
+
+### Command-Line Arguments
+
+-   `--port=<number>`: Specifies the port for the server to listen on.
+    -   **Default**: `8765`
+-   `--debug`: Enables detailed debug logging to the console.
+
+### Environment Variables
+
+-   `GEMINI_TOOLS_DEFAULT_MODEL`: Sets a default LLM model specifically for tools hosted by the server (like `google_web_search`).
+    -   **Purpose**: When a tool needs to invoke an LLM during its execution (e.g., to summarize search results), it will use the model specified by this variable. This allows you to use a different (potentially faster or cheaper) model for tool execution than for the main chat.
+    -   **Example**: `GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash`
+
+## Usage
+
+### 1. Installation & Build
+
+From the root of the `gemini-cli` project, ensure all dependencies are installed and then build the `mcp-server` package.
+
+```bash
+# From the project root
+npm install
+npm run build --workspace=@google/gemini-mcp-server
+```
+
+### 2. Starting the Server
+
+You can start the server using the `npm run start` command from the root directory, targeting the workspace.
+
+```bash
+# Start the server with default configuration
+npm run start --workspace=@google/gemini-mcp-server
+
+# Start on a different port with debug mode enabled
+npm run start --workspace=@google/gemini-mcp-server -- --port=9000 --debug
+
+# Use a faster model for tool calls
+GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@google/gemini-mcp-server
+```
+
+When the server starts successfully, you will see output similar to this:
+
+```
+🚀 Gemini CLI MCP Server and OpenAI Bridge are running on port 8765
+   - MCP transport listening on http://localhost:8765/mcp
+   - OpenAI-compatible endpoints available at http://localhost:8765/v1
+⚙️  Using default model for tools: gemini-2.5-pro
+```
+
+### 3. Testing the Endpoints
+
+You can use `curl` or any API client to test the server.
+
+**Test OpenAI Chat Completions (Streaming)**:
+
+```bash
+curl -N http://localhost:8765/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-pro",
+    "messages": [{"role": "user", "content": "Tell me a short story about a robot who learns to paint."}],
+    "stream": true
+  }'
+```
+
+**Test OpenAI Chat Completions (Non-Streaming)**:
+
+```bash
+curl http://localhost:8765/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-pro",
+    "messages": [{"role": "user", "content": "Why is the sky blue?"}],
+    "stream": false
+  }'
+```
+
+## Telemetry, Terms of Service, and Privacy
+
+### Telemetry
+
+The `@google/gemini-mcp-server` **does not introduce any new telemetry or data collection mechanisms**.
+
+It relies entirely on the OpenTelemetry (OTEL) system built into the `@google/gemini-cli-core` package. Therefore, all telemetry data (if enabled) will follow the main `gemini-cli` configuration and be sent to the destination specified in your `settings.json` file.
+
+For details on how to configure and use telemetry, please refer to the [main Gemini CLI telemetry documentation](../../docs/telemetry.md).
+
+### Terms of Service and Privacy Notice
+
+Your use of this server is governed by the Terms of Service and Privacy Policies corresponding to the `gemini-cli` account type you are using for authentication. As a bridge, `@google/gemini-mcp-server` does not collect, store, or process any additional data of its own.
+
+We strongly recommend you review the [main Gemini CLI Terms of Service and Privacy Notice documentation](../../docs/tos-privacy.md) for details applicable to your account.
 
 ---
+
+### Developer Note: Regarding the package name `@google/gemini-mcp-server`
+
+Please note that the name of this package, `@google/gemini-mcp-server`, reflects its origin as an internal component of the official `google-gemini/gemini-cli` monorepo.
+
+-   **Internal Naming**: This naming is consistent internally within the source code and workspaces of the `gemini-cli` project.
+-   **Not for Independent Publication**: This package is **not intended to be published independently** to a public npm registry. If you fork this project and wish to publish your modified version, you **must** change the package name to your own scope (e.g., `@your-username/gemini-mcp-server`) to comply with npm's package naming policies and to avoid confusion.
+
+----
 
 # Gemini CLI - MCP / OpenAI Bridge Server (`@google/gemini-mcp-server`)
 
