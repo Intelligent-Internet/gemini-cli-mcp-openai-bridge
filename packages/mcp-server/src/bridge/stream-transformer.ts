@@ -101,8 +101,7 @@ export function createOpenAIStreamTransformer(
       // 如果有 finishReason，发送一个带有 finish_reason 的块
       if (
         finishReason &&
-        finishReason !== 'FINISH_REASON_UNSPECIFIED' &&
-        finishReason !== 'NOT_SET'
+        finishReason !== 'FINISH_REASON_UNSPECIFIED'
       ) {
         const finishDelta: OpenAIDelta = {};
         const openAIChunk: OpenAIChunk = {

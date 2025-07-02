@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { type Config } from '@google/gemini-cli-core';
 import { createOpenAIStreamTransformer } from './stream-transformer.js';
 import { WritableStream } from 'node:stream/web';
-import { GeminiApiClient } from './gemini-client.js'; // <-- 引入新类
-import { type OpenAIChatCompletionRequest } from './types.js'; // <-- 引入新类型
+import { GeminiApiClient } from '../gemini-client.js'; // <-- 引入新类
+import { type OpenAIChatCompletionRequest } from '../types.js'; // <-- 引入新类型
 
 export function createOpenAIRouter(config: Config): Router {
   const router = Router();
@@ -15,9 +15,10 @@ export function createOpenAIRouter(config: Config): Router {
 
       if (!stream) {
         // 非流式响应逻辑可以稍后实现，或直接返回错误
-        return res
+        res
           .status(501)
           .json({ error: 'Non-streaming responses are not yet implemented.' });
+        return;
       }
 
       // --- 流式响应 ---
