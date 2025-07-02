@@ -32,77 +32,88 @@ const requestLogger = (debugMode: boolean) => (req: Request, res: Response, next
 export class GcliMcpBridge {
   private readonly config: Config;
   private readonly cliVersion: string;
-  private readonly mcpServer: McpServer;
   private readonly debugMode: boolean;
-  // **修改 1: 创建一个 Map 来存储每个会话的 transport 实例**
-  private readonly transports: Record<string, StreamableHTTPServerTransport> = {};
+  // **修改 2: 更新 transports 的类型以存储每个会话的 McpServer 和 Transport**
+  private readonly sessions: Record<
+    string,
+    { mcpServer: McpServer; transport: StreamableHTTPServerTransport }
+  > = {};
 
   constructor(config: Config, cliVersion: string, debugMode = false) {
     this.config = config;
     this.cliVersion = cliVersion;
     this.debugMode = debugMode;
-    this.mcpServer = new McpServer(
+  }
+
+  // **辅助方法：创建一个新的 McpServer 实例**
+  private createNewMcpServer(): McpServer {
+    const server = new McpServer(
       {
         name: 'gemini-cli-mcp-server',
         version: this.cliVersion,
       },
       { capabilities: { tools: { listChanged: true }, logging: {} } },
     );
+    // 在这里立即注册所有工具
+    this.registerAllGcliTools(server);
+    return server;
   }
 
   public async start(app: Application) {
-    await this.registerAllGcliTools();
 
     if (this.debugMode) {
       app.use(requestLogger(this.debugMode));
     }
 
-    // **修改 2: 更新路由处理器以管理多个 transport**
     app.all('/mcp', async (req: Request, res: Response) => {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      let transport: StreamableHTTPServerTransport | undefined = sessionId ? this.transports[sessionId] : undefined;
 
-      if (!transport) {
-        // 如果没有找到 transport，并且这是一个新的 initialize 请求，则创建一个新的
+      // **修改 5: 从 `sessions` map 中获取会话对象**
+      let session = sessionId ? this.sessions[sessionId] : undefined;
+
+      if (!session) {
         if (isInitializeRequest(req.body)) {
           if (this.debugMode) {
             console.log(
-              `${LOG_PREFIX} Creating new transport for initialize request`,
+              `${LOG_PREFIX} Creating new session and transport for initialize request`,
             );
           }
-          
-          transport = new StreamableHTTPServerTransport({
+
+          // **修改 6: 为新会话创建独立的 McpServer 和 Transport**
+          const newMcpServer = this.createNewMcpServer();
+          const newTransport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: newSessionId => {
+            onsessioninitialized: (newSessionId) => {
               if (this.debugMode) {
                 console.log(
                   `${LOG_PREFIX} Session initialized: ${newSessionId}`,
                 );
               }
-              // 将新的 transport 实例存储在 Map 中
-              if (transport) {
-                  this.transports[newSessionId] = transport;
-              }
+              // 存储新的会话对象
+              this.sessions[newSessionId] = {
+                mcpServer: newMcpServer,
+                transport: newTransport,
+              };
             },
           });
 
-          // 当连接关闭时，从 Map 中移除 transport
-          transport.onclose = () => {
-            const sid = transport!.sessionId;
-            if (sid && this.transports[sid]) {
+          newTransport.onclose = () => {
+            const sid = newTransport.sessionId;
+            if (sid && this.sessions[sid]) {
               if (this.debugMode) {
                 console.log(
-                  `${LOG_PREFIX} Session ${sid} closed, removing transport.`,
+                  `${LOG_PREFIX} Session ${sid} closed, removing session object.`,
                 );
               }
-              delete this.transports[sid];
+              delete this.sessions[sid];
             }
           };
 
-          // 将新的 transport 连接到我们唯一的 McpServer 实例
-          await this.mcpServer.connect(transport);
+          // 将新的 transport 连接到新的 McpServer 实例
+          await newMcpServer.connect(newTransport);
+
+          session = { mcpServer: newMcpServer, transport: newTransport };
         } else {
-          // 如果请求没有 session ID 但又不是 initialize 请求，则为错误请求
           console.error(
             `${LOG_PREFIX} Bad Request: Missing session ID for non-initialize request.`,
           );
@@ -118,13 +129,13 @@ export class GcliMcpBridge {
         }
       } else if (this.debugMode) {
         console.log(
-          `${LOG_PREFIX} Reusing transport for session: ${sessionId}`,
+          `${LOG_PREFIX} Reusing transport and server for session: ${sessionId}`,
         );
       }
 
-      // 使用找到的或新创建的 transport 处理请求
       try {
-        await transport.handleRequest(req, res, req.body);
+        // **修改 7: 使用会话特定的 transport 来处理请求**
+        await session.transport.handleRequest(req, res, req.body);
       } catch (e) {
         console.error(`${LOG_PREFIX} Error handling request:`, e);
         if (!res.headersSent) {
@@ -134,18 +145,18 @@ export class GcliMcpBridge {
     });
   }
 
-  private async registerAllGcliTools() {
+  private async registerAllGcliTools(mcpServer: McpServer) {
     const toolRegistry = await this.config.getToolRegistry();
     const allTools = toolRegistry.getAllTools();
     for (const tool of allTools) {
-      this.registerGcliTool(tool);
+      this.registerGcliTool(tool, mcpServer);
     }
   }
 
-  private registerGcliTool(tool: GcliTool) {
+  private registerGcliTool(tool: GcliTool, mcpServer: McpServer) {
     const inputSchema = this.convertJsonSchemaToZod(tool.schema.parameters);
 
-    this.mcpServer.registerTool(
+    mcpServer.registerTool(
       tool.name,
       {
         title: tool.displayName,
