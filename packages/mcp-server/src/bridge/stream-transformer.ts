@@ -1,7 +1,10 @@
-import { GenerateContentResponse, FinishReason } from '@google/genai';
 import { randomUUID } from 'node:crypto';
+import {
+  GeminiEventType,
+  ServerGeminiStreamEvent,
+} from '@google/gemini-cli-core';
 
-// --- 更新的 OpenAI 响应结构接口 ---
+// --- OpenAI 响应结构接口 ---
 interface OpenAIDelta {
   role?: 'assistant';
   content?: string | null;
@@ -28,21 +31,15 @@ interface OpenAIChunk {
   }[];
 }
 
-type ToolCallState = {
-  id: string;
-  name: string;
-  arguments: string;
-};
-
-// --- 更新的、有状态的转换器 ---
+// --- 新的、有状态的转换器 ---
 export function createOpenAIStreamTransformer(
   model: string,
-): TransformStream<GenerateContentResponse, Uint8Array> {
+): TransformStream<ServerGeminiStreamEvent, Uint8Array> {
   const chatID = `chatcmpl-${randomUUID()}`;
   const creationTime = Math.floor(Date.now() / 1000);
   const encoder = new TextEncoder();
   let isFirstChunk = true;
-  const toolCallStates: ToolCallState[] = [];
+  let toolCallIndex = 0;
 
   const createChunk = (
     delta: OpenAIDelta,
@@ -70,76 +67,78 @@ export function createOpenAIStreamTransformer(
   };
 
   return new TransformStream({
-    transform(geminiChunk, controller) {
-      const parts = geminiChunk.candidates?.[0]?.content?.parts || [];
-      const finishReason = geminiChunk.candidates?.[0]?.finishReason;
+    transform(event: ServerGeminiStreamEvent, controller) {
+      let delta: OpenAIDelta = {};
 
-      for (const part of parts) {
-        let delta: OpenAIDelta = {};
+      if (isFirstChunk) {
+        delta.role = 'assistant';
+        isFirstChunk = false;
+      }
 
-        if (isFirstChunk) {
-          delta.role = 'assistant';
-          isFirstChunk = false;
-        }
+      switch (event.type) {
+        case GeminiEventType.Content:
+          if (event.value) {
+            delta.content = event.value;
+            enqueueChunk(controller, createChunk(delta));
+          }
+          break;
 
-        if (part.text) {
-          delta.content = part.text;
-          enqueueChunk(controller, createChunk(delta));
-        }
+        case GeminiEventType.ToolCallRequest: {
+          const { name, args } = event.value;
+          // **重要**: 在 ID 中嵌入函数名，以便在收到工具响应时可以解析它
+          const toolCallId = `call_${name}_${randomUUID()}`;
 
-        if (part.functionCall && part.functionCall.name) {
-          const callId = `call_${randomUUID()}`;
-
-          // 模拟分块发送 tool_calls
-          // 1. 发送带有 name 的块
+          // OpenAI 流式工具调用需要分块发送
+          // 1. 发送包含函数名的块
           const nameDelta: OpenAIDelta = {
+            ...delta, // 包含 role (如果是第一个块)
             tool_calls: [
               {
-                index: toolCallStates.length,
-                id: callId,
+                index: toolCallIndex,
+                id: toolCallId,
                 type: 'function',
-                function: { name: part.functionCall.name, arguments: '' },
+                function: { name: name, arguments: '' },
               },
             ],
           };
-          if (isFirstChunk) {
-            nameDelta.role = 'assistant';
-            isFirstChunk = false;
-          }
           enqueueChunk(controller, createChunk(nameDelta));
 
-          // 2. 发送带有 arguments 的块
+          // 2. 发送包含参数的块
           const argsDelta: OpenAIDelta = {
             tool_calls: [
               {
-                index: toolCallStates.length,
-                id: callId,
+                index: toolCallIndex,
+                id: toolCallId,
                 type: 'function',
-                function: { arguments: JSON.stringify(part.functionCall.args) },
+                function: { arguments: JSON.stringify(args) },
               },
             ],
           };
           enqueueChunk(controller, createChunk(argsDelta));
 
-          toolCallStates.push({
-            id: callId,
-            name: part.functionCall.name,
-            arguments: JSON.stringify(part.functionCall.args),
-          });
+          toolCallIndex++;
+          break;
         }
-      }
 
-      if (finishReason && finishReason !== 'FINISH_REASON_UNSPECIFIED') {
-        const reason =
-          finishReason === FinishReason.STOP
-            ? toolCallStates.length > 0
-              ? 'tool_calls'
-              : 'stop'
-            : finishReason.toLowerCase();
-        enqueueChunk(controller, createChunk({}, reason));
+        case GeminiEventType.ChatCompressed:
+        case GeminiEventType.Thought:
+          // 这些事件目前在 OpenAI 格式中没有直接对应项，可以选择忽略或以某种方式记录
+          console.log(`[Stream Transformer] Ignoring event: ${event.type}`);
+          break;
+
+        // 错误和取消事件应在更高层处理，但为完整性起见
+        case GeminiEventType.Error:
+        case GeminiEventType.UserCancelled:
+          // 可以在这里发送一个带有错误信息的 data chunk，如果需要的话
+          break;
       }
     },
+
     flush(controller) {
+      // 在流结束时，发送一个带有 `tool_calls` 或 `stop` 的 finish_reason
+      const finish_reason = toolCallIndex > 0 ? 'tool_calls' : 'stop';
+      enqueueChunk(controller, createChunk({}, finish_reason));
+
       const doneString = `data: [DONE]\n\n`;
       controller.enqueue(encoder.encode(doneString));
     },

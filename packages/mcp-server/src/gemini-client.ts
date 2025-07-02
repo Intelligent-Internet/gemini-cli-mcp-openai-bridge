@@ -39,8 +39,8 @@ export class GeminiApiClient {
     }
 
     const functionDeclarations: FunctionDeclaration[] = openAITools
-      .filter((tool) => tool.type === 'function' && tool.function)
-      .map((tool) => ({
+      .filter(tool => tool.type === 'function' && tool.function)
+      .map(tool => ({
         name: tool.function.name,
         description: tool.function.description,
         parameters: tool.function.parameters,
@@ -54,19 +54,39 @@ export class GeminiApiClient {
   }
 
   /**
+   * 从 tool_call_id 中解析出原始的函数名。
+   * ID 格式为 "call_{functionName}_{uuid}"
+   */
+  private parseFunctionNameFromId(toolCallId: string): string {
+    const parts = toolCallId.split('_');
+    if (parts.length > 2 && parts[0] === 'call') {
+      // 重新组合可能包含下划线的函数名
+      return parts.slice(1, parts.length - 1).join('_');
+    }
+    // 回退机制，虽然不理想，但比发送错误名称要好
+    return 'unknown_tool_from_id';
+  }
+
+  /**
    * 将 OpenAI 格式的消息转换为 Gemini 格式的 Content 对象。
    */
   private openAIMessageToGemini(msg: OpenAIMessage): Content {
     const role = msg.role === 'assistant' ? 'model' : 'user';
 
     if (msg.role === 'tool') {
+      const functionName = this.parseFunctionNameFromId(msg.tool_call_id || '');
       return {
         role: 'user', // Gemini 使用 'user' role 来承载 functionResponse
         parts: [
           {
             functionResponse: {
-              name: msg.tool_call_id || 'unknown_tool', // 需要一个工具名
-              response: { content: msg.content },
+              name: functionName,
+              response: {
+                // Gemini 期望 response 是一个对象，我们把工具的输出放在这里
+                // 假设工具输出是一个 JSON 字符串，我们解析它
+                // 如果不是，就直接作为字符串
+                output: msg.content,
+              },
             },
           },
         ],
@@ -90,11 +110,12 @@ export class GeminiApiClient {
               const mimeType = mimePart.split(':')[1].split(';')[0];
               return { inlineData: { mimeType, data: dataPart } };
             }
+            // Gemini API 更喜欢 inlineData，但 fileData 也可以作为备选
             return { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } };
           }
-          return { text: '' };
+          return null;
         })
-        .filter((p) => p.text !== '' || p.inlineData || p.fileData);
+        .filter((p): p is Part => p !== null);
 
       return { role, parts };
     }
@@ -116,12 +137,13 @@ export class GeminiApiClient {
     tools?: OpenAIChatCompletionRequest['tools'];
     tool_choice?: any;
   }) {
-    const history = messages.map(this.openAIMessageToGemini);
+    const history = messages.map(msg => this.openAIMessageToGemini(msg));
     const lastMessage = history.pop();
     if (!lastMessage) {
       throw new Error('No message to send.');
     }
 
+    // 为每个请求创建一个新的、独立的聊天会话
     const oneShotChat = new GeminiChat(
       this.config,
       this.contentGenerator,
