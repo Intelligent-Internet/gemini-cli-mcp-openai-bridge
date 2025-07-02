@@ -87,7 +87,7 @@ export function createOpenAIStreamTransformer(
           enqueueChunk(controller, createChunk(delta));
         }
 
-        if (part.functionCall?.name) {
+        if (part.functionCall && part.functionCall.name) {
           const fc = part.functionCall;
           const callId = `call_${randomUUID()}`;
 
@@ -133,10 +133,10 @@ export function createOpenAIStreamTransformer(
       if (finishReason && finishReason !== 'FINISH_REASON_UNSPECIFIED') {
         const reason =
           finishReason === FinishReason.STOP
-            ? 'stop'
-            : finishReason === FinishReason.TOOL_CALL
+            ? toolCallStates.length > 0
               ? 'tool_calls'
-              : finishReason.toLowerCase();
+              : 'stop'
+            : finishReason.toLowerCase();
         enqueueChunk(controller, createChunk({}, reason));
       }
     },
