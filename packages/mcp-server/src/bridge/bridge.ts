@@ -175,8 +175,7 @@ export class GcliMcpBridge {
             }
 
             // Send the request using the one-shot session
-            const result = await oneShotChat.sendMessage(request);
-            const response = result.response;
+            const response = await oneShotChat.sendMessage(request);
             const resultText = response.text() || '';
 
             // Convert the result to the MCP format
