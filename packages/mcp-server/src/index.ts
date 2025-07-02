@@ -50,11 +50,21 @@ async function startMcpServer() {
   // 1. 独立的、简单的参数解析
   const args = process.argv.slice(2);
   const portArg = args.find(arg => arg.startsWith('--port='));
-  const port = portArg ? parseInt(portArg.split('=')[1], 10) : 8765;
+  
+  // 支持环境变量 GEMINI_MCP_PORT，优先级：命令行参数 > 环境变量 > 默认值
+  let port: number;
+  if (portArg) {
+    port = parseInt(portArg.split('=')[1], 10);
+  } else if (process.env.GEMINI_MCP_PORT) {
+    port = parseInt(process.env.GEMINI_MCP_PORT, 10);
+  } else {
+    port = 8765;
+  }
+  
   const debugMode = args.includes('--debug');
 
   if (isNaN(port)) {
-    console.error('Invalid port number provided. Use --port=<number>.');
+    console.error('Invalid port number provided. Use --port=<number> or set GEMINI_MCP_PORT environment variable.');
     process.exit(1);
   }
 

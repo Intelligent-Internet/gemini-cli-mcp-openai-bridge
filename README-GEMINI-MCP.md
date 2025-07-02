@@ -66,10 +66,14 @@ You can configure the server's behavior via command-line arguments and environme
 
 -   `--port=<number>`: Specifies the port for the server to listen on.
     -   **Default**: `8765`
+    -   **Note**: Can also be set via the `GEMINI_MCP_PORT` environment variable. Command-line argument takes precedence.
 -   `--debug`: Enables detailed debug logging to the console.
 
 ### Environment Variables
 
+-   `GEMINI_MCP_PORT`: Specifies the port for the server to listen on.
+    -   **Default**: `8765`
+    -   **Note**: Command-line argument `--port` takes precedence over this environment variable.
 -   `GEMINI_TOOLS_DEFAULT_MODEL`: Sets a default LLM model specifically for tools hosted by the server (like `google_web_search`).
     -   **Purpose**: When a tool needs to invoke an LLM during its execution (e.g., to summarize search results), it will use the model specified by this variable. This allows you to use a different (potentially faster or cheaper) model for tool execution than for the main chat.
     -   **Example**: `GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash`
@@ -99,6 +103,9 @@ npm run start --workspace=@gemini-community/gemini-mcp-server -- --port=9000 --d
 
 # Use a faster model for tool calls
 GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
+
+# Use environment variable to set the port
+GEMINI_MCP_PORT=9000 npm run start --workspace=@gemini-community/gemini-mcp-server
 ```
 
 When the server starts successfully, you will see output similar to this:
@@ -222,10 +229,14 @@ Please note that the name of this package, `@gemini-community/gemini-mcp-server`
 
 -   `--port=<number>`: 指定服务器监听的端口。
     -   **默认值**: `8765`
+    -   **注意**: 也可以通过 `GEMINI_MCP_PORT` 环境变量设置。命令行参数的优先级更高。
 -   `--debug`: 启用详细的调试日志输出。
 
 ### 环境变量
 
+-   `GEMINI_MCP_PORT`: 指定服务器监听的端口。
+    -   **默认值**: `8765`
+    -   **注意**: 命令行参数 `--port` 的优先级高于此环境变量。
 -   `GEMINI_TOOLS_DEFAULT_MODEL`: 为服务器托管的工具（如 `google_web_search`）设置一个默认的 LLM 模型。
     -   **用途**: 当一个工具在执行过程中需要调用 LLM（例如，对搜索结果进行总结）时，它将使用此环境变量指定的模型。这允许您为主聊天和工具执行使用不同的模型，从而可能优化成本和速度。
     -   **示例**: `GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash`
@@ -255,6 +266,9 @@ npm run start --workspace=@gemini-community/gemini-mcp-server -- --port=9000 --d
 
 # 使用一个更快的模型进行工具调用
 GEMINI_TOOLS_DEFAULT_MODEL=gemini-1.5-flash npm run start --workspace=@gemini-community/gemini-mcp-server
+
+# 使用环境变量设置端口
+GEMINI_MCP_PORT=9000 npm run start --workspace=@gemini-community/gemini-mcp-server
 ```
 
 服务器成功启动后，您将看到类似以下的输出：
