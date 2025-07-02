@@ -193,8 +193,15 @@ export class GeminiApiClient {
           if (part.text) {
             yield { type: 'text', data: part.text };
           }
-          if (part.functionCall) {
-            yield { type: 'tool_code', data: part.functionCall };
+          if (part.functionCall && part.functionCall.name) {
+            yield {
+              type: 'tool_code',
+              data: {
+                name: part.functionCall.name,
+                args:
+                  (part.functionCall.args as Record<string, unknown>) ?? {},
+              },
+            };
           }
         }
       }
