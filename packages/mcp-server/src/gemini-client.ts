@@ -77,6 +77,17 @@ export class GeminiApiClient {
 
     if (msg.role === 'tool') {
       const functionName = this.parseFunctionNameFromId(msg.tool_call_id || '');
+      let responsePayload: object;
+
+      try {
+        // 尝试将工具返回的内容解析为 JSON 对象
+        responsePayload = JSON.parse(msg.content as string);
+      } catch (e) {
+        // 如果解析失败，说明工具返回的可能是一个简单的字符串
+        // 在这种情况下，我们遵循 Gemini API 的惯例，将其包装在 { "output": "..." } 中
+        responsePayload = { output: msg.content };
+      }
+
       return {
         role: 'user', // Gemini 使用 'user' role 来承载 functionResponse
         parts: [
@@ -84,12 +95,8 @@ export class GeminiApiClient {
             functionResponse: {
               id: msg.tool_call_id,
               name: functionName,
-              response: {
-                // Gemini 期望 response 是一个对象，我们把工具的输出放在这里
-                // 假设工具输出是一个 JSON 字符串，我们解析它
-                // 如果不是，就直接作为字符串
-                output: msg.content,
-              },
+              // 直接将解析后的对象或包装后的对象作为 response 的值
+              response: responsePayload,
             },
           },
         ],
