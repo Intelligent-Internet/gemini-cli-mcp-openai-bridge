@@ -8,9 +8,9 @@ import {
   type ToolResult,
   GeminiChat,
 } from '@google/gemini-cli-core';
+// isInitializeRequest 在这种模式下不再需要
 import {
   type CallToolResult,
-  isInitializeRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   type PartUnion,
@@ -22,7 +22,6 @@ import { randomUUID } from 'node:crypto';
 
 const LOG_PREFIX = '[MCP SERVER]';
 
-// Simplified request logger - only log on debug mode
 const requestLogger = (debugMode: boolean) => (req: Request, res: Response, next: NextFunction) => {
   if (debugMode) {
     console.log(`${LOG_PREFIX} ${req.method} ${req.url}`);
@@ -35,6 +34,8 @@ export class GcliMcpBridge {
   private readonly cliVersion: string;
   private readonly mcpServer: McpServer;
   private readonly debugMode: boolean;
+  // 将 transport 提升为类的成员
+  private transport: StreamableHTTPServerTransport | undefined;
 
   constructor(config: Config, cliVersion: string, debugMode = false) {
     this.config = config;
@@ -52,72 +53,32 @@ export class GcliMcpBridge {
   public async start(app: Application) {
     await this.registerAllGcliTools();
 
-    // Only use request logger in debug mode
     if (this.debugMode) {
       app.use(requestLogger(this.debugMode));
     }
+    
+    // 1. 在 start 方法中只创建一次 transport
+    this.transport = new StreamableHTTPServerTransport({
+      // sessionIdGenerator 仍然是需要的，SDK 会用它来处理会话
+      sessionIdGenerator: () => randomUUID(),
+    });
 
-    const transports: Record<string, StreamableHTTPServerTransport> = {};
+    // 2. 在 start 方法中只连接一次
+    await this.mcpServer.connect(this.transport);
+    
+    console.log(`${LOG_PREFIX} McpServer connected to the transport.`);
 
+    // 3. 修改路由处理器，始终使用同一个 transport 实例
     app.all('/mcp', async (req: Request, res: Response) => {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      let transport = sessionId ? transports[sessionId] : undefined;
-
-      if (!transport) {
-        if (isInitializeRequest(req.body)) {
-          if (this.debugMode) {
-            console.log(
-              `${LOG_PREFIX} Creating new transport for initialize request`,
-            );
-          }
-          transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: newSessionId => {
-              if (this.debugMode) {
-                console.log(
-                  `${LOG_PREFIX} Session initialized: ${newSessionId}`,
-                );
-              }
-              transports[newSessionId] = transport!;
-            },
-          });
-
-          transport.onclose = () => {
-            const sid = transport!.sessionId;
-            if (sid && transports[sid]) {
-              if (this.debugMode) {
-                console.log(
-                  `${LOG_PREFIX} Session ${sid} closed`,
-                );
-              }
-              delete transports[sid];
-            }
-          };
-
-          // Connect the new transport to the *existing* McpServer
-          await this.mcpServer.connect(transport);
-        } else {
-          console.error(
-            `${LOG_PREFIX} Bad Request: Missing or invalid session ID`,
-          );
-          res.status(400).json({
-            jsonrpc: '2.0',
-            error: {
-              code: -32000,
-              message: 'Bad Request: Missing or invalid session ID.',
-            },
-            id: null,
-          });
-          return;
-        }
-      } else if (this.debugMode) {
-        console.log(
-          `${LOG_PREFIX} Reusing transport for session: ${sessionId}`,
-        );
+      if (!this.transport) {
+        console.error(`${LOG_PREFIX} Transport is not initialized.`);
+        res.status(500).json({ error: 'Server transport not available' });
+        return;
       }
-
+      
       try {
-        await transport.handleRequest(req, res, req.body);
+        // handleRequest 方法能够处理并发请求
+        await this.transport.handleRequest(req, res, req.body);
       } catch (e) {
         console.error(`${LOG_PREFIX} Error handling request:`, e);
         if (!res.headersSent) {
