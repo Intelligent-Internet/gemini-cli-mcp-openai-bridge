@@ -16,21 +16,25 @@ interface OpenAIDelta {
   }[];
 }
 
-interface OpenAIChoice {
-  index: number;
-  delta: OpenAIDelta;
-  finish_reason: string | null;
-}
-
 interface OpenAIChunk {
   id: string;
   object: 'chat.completion.chunk';
   created: number;
   model: string;
-  choices: OpenAIChoice[];
+  choices: {
+    index: number;
+    delta: OpenAIDelta;
+    finish_reason: string | null;
+  }[];
 }
 
-// --- 更新的转换器 ---
+type ToolCallState = {
+  id: string;
+  name: string;
+  arguments: string;
+};
+
+// --- 更新的、有状态的转换器 ---
 export function createOpenAIStreamTransformer(
   model: string,
 ): TransformStream<GenerateContentResponse, Uint8Array> {
@@ -38,16 +42,40 @@ export function createOpenAIStreamTransformer(
   const creationTime = Math.floor(Date.now() / 1000);
   const encoder = new TextEncoder();
   let isFirstChunk = true;
+  const toolCallStates: ToolCallState[] = [];
+
+  const createChunk = (
+    delta: OpenAIDelta,
+    finish_reason: string | null = null,
+  ): OpenAIChunk => ({
+    id: chatID,
+    object: 'chat.completion.chunk',
+    created: creationTime,
+    model: model,
+    choices: [
+      {
+        index: 0,
+        delta,
+        finish_reason,
+      },
+    ],
+  });
+
+  const enqueueChunk = (
+    controller: TransformStreamDefaultController<Uint8Array>,
+    chunk: OpenAIChunk,
+  ) => {
+    const sseString = `data: ${JSON.stringify(chunk)}\n\n`;
+    controller.enqueue(encoder.encode(sseString));
+  };
 
   return new TransformStream({
-    transform(chunk, controller) {
-      const parts = chunk.candidates?.[0]?.content?.parts || [];
-      const finishReason = chunk.candidates?.[0]?.finishReason;
-
-      let hasContent = false;
+    transform(geminiChunk, controller) {
+      const parts = geminiChunk.candidates?.[0]?.content?.parts || [];
+      const finishReason = geminiChunk.candidates?.[0]?.finishReason;
 
       for (const part of parts) {
-        const delta: OpenAIDelta = {};
+        let delta: OpenAIDelta = {};
 
         if (isFirstChunk) {
           delta.role = 'assistant';
@@ -56,73 +84,67 @@ export function createOpenAIStreamTransformer(
 
         if (part.text) {
           delta.content = part.text;
-          hasContent = true;
+          enqueueChunk(controller, createChunk(delta));
         }
 
         if (part.functionCall) {
           const fc = part.functionCall;
-          const callId = `call_${randomUUID()}`; // 为每个调用生成一个唯一的ID
+          const callId = `call_${randomUUID()}`;
 
-          // OpenAI的流式工具调用是分块的，我们这里简化为一次性发送
-          // Gemini通常也是一次性返回一个完整的functionCall
-          delta.tool_calls = [
-            {
-              index: 0, // 假设只有一个工具调用
-              id: callId,
-              type: 'function',
-              function: {
-                name: fc.name,
-                arguments: JSON.stringify(fc.args), // 参数必须是字符串
-              },
-            },
-          ];
-          hasContent = true;
-        }
-
-        if (hasContent) {
-          const openAIChunk: OpenAIChunk = {
-            id: chatID,
-            object: 'chat.completion.chunk',
-            created: creationTime,
-            model: model,
-            choices: [
+          // 模拟分块发送 tool_calls
+          // 1. 发送带有 name 的块
+          const nameDelta: OpenAIDelta = {
+            tool_calls: [
               {
-                index: 0,
-                delta: delta,
-                finish_reason: null,
+                index: toolCallStates.length,
+                id: callId,
+                type: 'function',
+                function: { name: fc.name, arguments: '' },
               },
             ],
           };
-          const sseString = `data: ${JSON.stringify(openAIChunk)}\n\n`;
-          controller.enqueue(encoder.encode(sseString));
+          if (isFirstChunk) {
+            nameDelta.role = 'assistant';
+            isFirstChunk = false;
+          }
+          enqueueChunk(controller, createChunk(nameDelta));
+
+          // 2. 发送带有 arguments 的块
+          const argsDelta: OpenAIDelta = {
+            tool_calls: [
+              {
+                index: toolCallStates.length,
+                id: callId,
+                type: 'function',
+                function: { arguments: JSON.stringify(fc.args) },
+              },
+            ],
+          };
+          enqueueChunk(controller, createChunk(argsDelta));
+
+          toolCallStates.push({
+            id: callId,
+            name: fc.name,
+            arguments: JSON.stringify(fc.args),
+          });
         }
       }
 
-      // 如果有 finishReason，发送一个带有 finish_reason 的块
       if (
         finishReason &&
-        finishReason !== 'FINISH_REASON_UNSPECIFIED'
+        finishReason !== 'FINISH_REASON_UNSPECIFIED' &&
+        finishReason !== 'NOT_SET'
       ) {
-        const finishDelta: OpenAIDelta = {};
-        const openAIChunk: OpenAIChunk = {
-          id: chatID,
-          object: 'chat.completion.chunk',
-          created: creationTime,
-          model: model,
-          choices: [
-            {
-              index: 0,
-              delta: finishDelta,
-              finish_reason: finishReason === 'STOP' ? 'stop' : 'tool_calls',
-            },
-          ],
-        };
-        const sseString = `data: ${JSON.stringify(openAIChunk)}\n\n`;
-        controller.enqueue(encoder.encode(sseString));
+        const reason =
+          finishReason === 'STOP'
+            ? 'stop'
+            : finishReason === 'TOOL_CALL'
+              ? 'tool_calls'
+              : finishReason.toLowerCase();
+        enqueueChunk(controller, createChunk({}, reason));
       }
     },
     flush(controller) {
-      // 流结束时，发送 [DONE] 消息
       const doneString = `data: [DONE]\n\n`;
       controller.enqueue(encoder.encode(doneString));
     },
