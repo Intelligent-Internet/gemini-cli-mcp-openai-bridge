@@ -82,6 +82,7 @@ export class GeminiApiClient {
         parts: [
           {
             functionResponse: {
+              id: msg.tool_call_id,
               name: functionName,
               response: {
                 // Gemini 期望 response 是一个对象，我们把工具的输出放在这里
