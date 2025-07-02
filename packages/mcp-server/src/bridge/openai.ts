@@ -66,10 +66,40 @@ export function createOpenAIRouter(config: Config): Router {
       console.error('[OpenAI Bridge] Error:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'An unknown error occurred';
+
+      // [MODIFICATION] 检查错误类型并设置适当的状态码
+      let statusCode = 500; // 默认为内部服务器错误
+      if (error instanceof Error) {
+        // 检查 gaxios 或类似 HTTP 客户端可能附加的 status 属性
+        const status = (error as any).status;
+        if (status === 429) {
+          statusCode = 429;
+        } else if (typeof status === 'number' && status >= 400 && status < 500) {
+          statusCode = status;
+        }
+        // 也可以通过检查消息内容来增加健壮性
+        else if (
+          errorMessage.includes('429') ||
+          errorMessage.toLowerCase().includes('quota')
+        ) {
+          statusCode = 429;
+        }
+      }
+
       if (!res.headersSent) {
-        res.status(500).json({ error: errorMessage });
+        // 使用动态的状态码
+        res.status(statusCode).json({
+          error: {
+            message: errorMessage,
+            type: 'gemini_api_error',
+            code: statusCode, // 在响应体中也反映出来
+          },
+        });
       } else {
-        res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
+        // 如果流已经开始，我们无法改变状态码，但可以在流中发送错误
+        res.write(
+          `data: ${JSON.stringify({ error: errorMessage, code: statusCode })}\n\n`,
+        );
         res.end();
       }
     }

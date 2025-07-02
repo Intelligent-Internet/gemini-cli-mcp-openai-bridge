@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction, Application } from 'express';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+// [FIX] Correctly import 'Server' and 'JSONRPCError' from the SDK's server entry point.
+import { Server, JSONRPCError } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import {
@@ -39,12 +40,14 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 export class GcliMcpBridge {
   private readonly config: Config;
   private readonly cliVersion: string;
-  private readonly mcpServer: McpServer;
+  // [FIX] Use the correct class name 'Server'
+  private readonly mcpServer: Server;
 
   constructor(config: Config, cliVersion: string) {
     this.config = config;
     this.cliVersion = cliVersion;
-    this.mcpServer = new McpServer(
+    // [FIX] Instantiate the correct class 'Server'
+    this.mcpServer = new Server(
       {
         name: 'gemini-cli-mcp-server',
         version: this.cliVersion,
@@ -141,9 +144,32 @@ export class GcliMcpBridge {
         description: tool.description,
         inputSchema: inputSchema,
       },
-      async (args, extra) => {
-        const result = await tool.execute(args, extra.signal);
-        return this.convertGcliResultToMcpResult(result);
+      // [FIX] Add explicit types for args and extra, and implement the try/catch block.
+      async (
+        args: Record<string, unknown>,
+        extra: { signal: AbortSignal },
+      ) => {
+        try {
+          const result = await tool.execute(args, extra.signal);
+          return this.convertGcliResultToMcpResult(result);
+        } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          console.error(
+            `${LOG_PREFIX} 💥 Error executing tool '${tool.name}':`,
+            errorMessage,
+          );
+
+          const userFacingMessage = `Error executing tool '${tool.name}': Quota exceeded. Do not retry. Upstream error: ${errorMessage}`;
+
+          throw new JSONRPCError(
+            -32000,
+            userFacingMessage,
+            {
+              toolName: tool.name,
+              originalError: errorMessage,
+            },
+          );
+        }
       },
     );
   }
