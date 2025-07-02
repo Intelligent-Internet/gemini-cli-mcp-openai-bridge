@@ -88,7 +88,6 @@ export function createOpenAIStreamTransformer(
         }
 
         if (part.functionCall && part.functionCall.name) {
-          const fc = part.functionCall;
           const callId = `call_${randomUUID()}`;
 
           // 模拟分块发送 tool_calls
@@ -99,7 +98,7 @@ export function createOpenAIStreamTransformer(
                 index: toolCallStates.length,
                 id: callId,
                 type: 'function',
-                function: { name: fc.name, arguments: '' },
+                function: { name: part.functionCall.name, arguments: '' },
               },
             ],
           };
@@ -116,7 +115,7 @@ export function createOpenAIStreamTransformer(
                 index: toolCallStates.length,
                 id: callId,
                 type: 'function',
-                function: { arguments: JSON.stringify(fc.args) },
+                function: { arguments: JSON.stringify(part.functionCall.args) },
               },
             ],
           };
@@ -124,8 +123,8 @@ export function createOpenAIStreamTransformer(
 
           toolCallStates.push({
             id: callId,
-            name: fc.name,
-            arguments: JSON.stringify(fc.args),
+            name: part.functionCall.name,
+            arguments: JSON.stringify(part.functionCall.args),
           });
         }
       }
