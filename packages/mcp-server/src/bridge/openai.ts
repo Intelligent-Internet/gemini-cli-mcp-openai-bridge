@@ -111,9 +111,8 @@ export function createOpenAIRouter(config: Config): Router {
     res.json({
       object: 'list',
       data: [
-        { id: 'gemini-1.5-pro-latest', object: 'model', owned_by: 'google' },
-        { id: 'gemini-1.5-flash-latest', object: 'model', owned_by: 'google' },
-        { id: 'gemini-pro', object: 'model', owned_by: 'google' },
+        { id: 'gemini-2.5-pro', object: 'model', owned_by: 'google' },
+        { id: 'gemini-2.5-flash', object: 'model', owned_by: 'google' },
       ],
     });
   });
