@@ -1,6 +1,5 @@
 import express, { Request, Response, NextFunction, Application } from 'express';
-// [FIX] Correctly import 'Server' and 'JSONRPCError' from the SDK's server entry point.
-import { Server, JSONRPCError } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import {
@@ -40,14 +39,12 @@ const requestLogger = (req: Request, res: Response, next: NextFunction) => {
 export class GcliMcpBridge {
   private readonly config: Config;
   private readonly cliVersion: string;
-  // [FIX] Use the correct class name 'Server'
-  private readonly mcpServer: Server;
+  private readonly mcpServer: McpServer;
 
   constructor(config: Config, cliVersion: string) {
     this.config = config;
     this.cliVersion = cliVersion;
-    // [FIX] Instantiate the correct class 'Server'
-    this.mcpServer = new Server(
+    this.mcpServer = new McpServer(
       {
         name: 'gemini-cli-mcp-server',
         version: this.cliVersion,
@@ -144,7 +141,6 @@ export class GcliMcpBridge {
         description: tool.description,
         inputSchema: inputSchema,
       },
-      // [FIX] Add explicit types for args and extra, and implement the try/catch block.
       async (
         args: Record<string, unknown>,
         extra: { signal: AbortSignal },
@@ -159,15 +155,9 @@ export class GcliMcpBridge {
             errorMessage,
           );
 
-          const userFacingMessage = `Error executing tool '${tool.name}': Quota exceeded. Do not retry. Upstream error: ${errorMessage}`;
-
-          throw new JSONRPCError(
-            -32000,
-            userFacingMessage,
-            {
-              toolName: tool.name,
-              originalError: errorMessage,
-            },
+          // 简单地抛出一个Error，MCP SDK会自动处理为适当的JSON-RPC错误
+          throw new Error(
+            `Error executing tool '${tool.name}': ${errorMessage}`,
           );
         }
       },
