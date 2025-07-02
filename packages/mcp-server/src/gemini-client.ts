@@ -98,24 +98,22 @@ export class GeminiApiClient {
     }
 
     if (Array.isArray(msg.content)) {
-      const parts: Part[] = msg.content
-        .map((part: MessageContentPart) => {
-          if (part.type === 'text') {
-            return { text: part.text || '' };
-          }
-          if (part.type === 'image_url' && part.image_url) {
-            const imageUrl = part.image_url.url;
-            if (imageUrl.startsWith('data:')) {
-              const [mimePart, dataPart] = imageUrl.split(',');
-              const mimeType = mimePart.split(':')[1].split(';')[0];
-              return { inlineData: { mimeType, data: dataPart } };
-            }
+      const parts = msg.content.reduce<Part[]>((acc, part: MessageContentPart) => {
+        if (part.type === 'text') {
+          acc.push({ text: part.text || '' });
+        } else if (part.type === 'image_url' && part.image_url) {
+          const imageUrl = part.image_url.url;
+          if (imageUrl.startsWith('data:')) {
+            const [mimePart, dataPart] = imageUrl.split(',');
+            const mimeType = mimePart.split(':')[1].split(';')[0];
+            acc.push({ inlineData: { mimeType, data: dataPart } });
+          } else {
             // Gemini API 更喜欢 inlineData，但 fileData 也可以作为备选
-            return { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } };
+            acc.push({ fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } });
           }
-          return null;
-        })
-        .filter((p): p is Part => p !== null);
+        }
+        return acc;
+      }, []);
 
       return { role, parts };
     }
