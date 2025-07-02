@@ -97,15 +97,8 @@ async function startMcpServer() {
     console.log(`Using authentication method: ${selectedAuthType}`);
   }
 
-  // Check for the custom tools model environment variable
-  const toolsDefaultModel = process.env.GEMINI_TOOLS_DEFAULT_MODEL;
-  if (toolsDefaultModel && toolsDefaultModel.trim() !== '') {
-    config.setModel(toolsDefaultModel.trim());
-    console.log(`🚀 Using custom model for tools: ${toolsDefaultModel.trim()}`);
-  } else {
-    // Log the default model being used if the environment variable is not set
-    console.log(`⚙️  Using default model for tools: ${config.getModel()}`);
-  }
+  // Log the model being used for tools. This is now set in loadServerConfig.
+  console.log(`⚙️  Using model for tools: ${config.getModel()}`);
 
   // 4. 初始化并启动 MCP 桥接服务 和 OpenAI 服务
   const mcpBridge = new GcliMcpBridge(config, cliVersion, debugMode);

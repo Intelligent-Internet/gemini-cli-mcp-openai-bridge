@@ -93,6 +93,12 @@ export async function loadServerConfig(
 
   const sandboxConfig = await loadSandboxConfig(settings, {});
 
+  // Prioritize GEMINI_TOOLS_DEFAULT_MODEL, then GEMINI_MODEL, then the hardcoded default.
+  const model =
+    process.env.GEMINI_TOOLS_DEFAULT_MODEL ||
+    process.env.GEMINI_MODEL ||
+    DEFAULT_GEMINI_MODEL;
+
   return new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -136,7 +142,7 @@ export async function loadServerConfig(
     cwd: process.cwd(),
     fileDiscoveryService: fileService,
     bugCommand: settings.bugCommand,
-    model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+    model: model,
     extensionContextFilePaths,
   });
 }
