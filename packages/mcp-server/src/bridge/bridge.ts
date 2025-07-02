@@ -22,16 +22,10 @@ import { randomUUID } from 'node:crypto';
 
 const LOG_PREFIX = '[MCP SERVER]';
 
-// NEW: 日志中间件
-const requestLogger = (req: Request, res: Response, next: NextFunction) => {
-  console.log(`${LOG_PREFIX} ⬇️  Incoming Request: ${req.method} ${req.url}`);
-  console.log(`${LOG_PREFIX}    Headers:`, JSON.stringify(req.headers, null, 2));
-  if (req.body && Object.keys(req.body).length > 0) {
-    const bodyStr = JSON.stringify(req.body);
-    console.log(
-      `${LOG_PREFIX}    Body:`,
-      bodyStr.length > 300 ? bodyStr.substring(0, 300) + '...' : bodyStr,
-    );
+// Simplified request logger - only log on debug mode
+const requestLogger = (debugMode: boolean) => (req: Request, res: Response, next: NextFunction) => {
+  if (debugMode) {
+    console.log(`${LOG_PREFIX} ${req.method} ${req.url}`);
   }
   next();
 };
@@ -40,10 +34,12 @@ export class GcliMcpBridge {
   private readonly config: Config;
   private readonly cliVersion: string;
   private readonly mcpServer: McpServer;
+  private readonly debugMode: boolean;
 
-  constructor(config: Config, cliVersion: string) {
+  constructor(config: Config, cliVersion: string, debugMode = false) {
     this.config = config;
     this.cliVersion = cliVersion;
+    this.debugMode = debugMode;
     this.mcpServer = new McpServer(
       {
         name: 'gemini-cli-mcp-server',
@@ -56,8 +52,10 @@ export class GcliMcpBridge {
   public async start(app: Application) {
     await this.registerAllGcliTools();
 
-    // NEW: 使用日志中间件
-    app.use(requestLogger);
+    // Only use request logger in debug mode
+    if (this.debugMode) {
+      app.use(requestLogger(this.debugMode));
+    }
 
     const transports: Record<string, StreamableHTTPServerTransport> = {};
 
@@ -67,15 +65,19 @@ export class GcliMcpBridge {
 
       if (!transport) {
         if (isInitializeRequest(req.body)) {
-          console.log(
-            `${LOG_PREFIX} creating new transport for initialize request.`,
-          );
+          if (this.debugMode) {
+            console.log(
+              `${LOG_PREFIX} Creating new transport for initialize request`,
+            );
+          }
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: newSessionId => {
-              console.log(
-                `${LOG_PREFIX} ✅ Session initialized with ID: ${newSessionId}`,
-              );
+              if (this.debugMode) {
+                console.log(
+                  `${LOG_PREFIX} Session initialized: ${newSessionId}`,
+                );
+              }
               transports[newSessionId] = transport!;
             },
           });
@@ -83,9 +85,11 @@ export class GcliMcpBridge {
           transport.onclose = () => {
             const sid = transport!.sessionId;
             if (sid && transports[sid]) {
-              console.log(
-                `${LOG_PREFIX} 🚪 Transport for session ${sid} closed.`,
-              );
+              if (this.debugMode) {
+                console.log(
+                  `${LOG_PREFIX} Session ${sid} closed`,
+                );
+              }
               delete transports[sid];
             }
           };
@@ -94,7 +98,7 @@ export class GcliMcpBridge {
           await this.mcpServer.connect(transport);
         } else {
           console.error(
-            `${LOG_PREFIX} ❌ Bad Request: Missing or invalid session ID for non-initialize request.`,
+            `${LOG_PREFIX} Bad Request: Missing or invalid session ID`,
           );
           res.status(400).json({
             jsonrpc: '2.0',
@@ -106,16 +110,16 @@ export class GcliMcpBridge {
           });
           return;
         }
-      } else {
+      } else if (this.debugMode) {
         console.log(
-          `${LOG_PREFIX}  reusing transport for session: ${sessionId}`,
+          `${LOG_PREFIX} Reusing transport for session: ${sessionId}`,
         );
       }
 
       try {
         await transport.handleRequest(req, res, req.body);
       } catch (e) {
-        console.error(`${LOG_PREFIX} 💥 Error handling request:`, e);
+        console.error(`${LOG_PREFIX} Error handling request:`, e);
         if (!res.headersSent) {
           res.status(500).end();
         }
@@ -151,8 +155,7 @@ export class GcliMcpBridge {
         } catch (e) {
           const errorMessage = e instanceof Error ? e.message : String(e);
           console.error(
-            `${LOG_PREFIX} 💥 Error executing tool '${tool.name}':`,
-            errorMessage,
+            `${LOG_PREFIX} Error executing tool '${tool.name}': ${errorMessage}`,
           );
 
           // 简单地抛出一个Error，MCP SDK会自动处理为适当的JSON-RPC错误

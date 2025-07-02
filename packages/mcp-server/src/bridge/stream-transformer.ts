@@ -31,6 +31,7 @@ interface OpenAIChunk {
 // --- 新的、有状态的转换器 ---
 export function createOpenAIStreamTransformer(
   model: string,
+  debugMode = false,
 ): TransformStream<StreamChunk, Uint8Array> {
   const chatID = `chatcmpl-${randomUUID()}`;
   const creationTime = Math.floor(Date.now() / 1000);
@@ -65,10 +66,12 @@ export function createOpenAIStreamTransformer(
 
   return new TransformStream({
     transform(chunk: StreamChunk, controller) {
-      console.log(
-        `[Stream Transformer] Received chunk: ${chunk.type}`,
-        chunk.data ? JSON.stringify(chunk.data) : '',
-      );
+      if (debugMode) {
+        console.log(
+          `[Stream Transformer] Received chunk: ${chunk.type}`,
+          chunk.data ? JSON.stringify(chunk.data) : '',
+        );
+      }
       let delta: OpenAIDelta = {};
 
       if (isFirstChunk) {
@@ -123,7 +126,9 @@ export function createOpenAIStreamTransformer(
 
         case 'reasoning':
           // 这些事件目前在 OpenAI 格式中没有直接对应项，可以选择忽略或以某种方式记录
-          console.log(`[Stream Transformer] Ignoring chunk: ${chunk.type}`);
+          if (debugMode) {
+            console.log(`[Stream Transformer] Ignoring chunk: ${chunk.type}`);
+          }
           break;
       }
     },

@@ -5,16 +5,18 @@ import { WritableStream } from 'node:stream/web';
 import { GeminiApiClient } from '../gemini-client.js'; // <-- 引入新类
 import { type OpenAIChatCompletionRequest } from '../types.js'; // <-- 引入新类型
 
-export function createOpenAIRouter(config: Config): Router {
+export function createOpenAIRouter(config: Config, debugMode = false): Router {
   const router = Router();
 
   router.post('/chat/completions', async (req: Request, res: Response) => {
     try {
       const body = req.body as OpenAIChatCompletionRequest;
-      console.log(
-        '[OpenAI Bridge] Received /chat/completions request:',
-        JSON.stringify(body, null, 2),
-      );
+      if (debugMode) {
+        console.log(
+          '[OpenAI Bridge] Received /chat/completions request:',
+          JSON.stringify(body, null, 2),
+        );
+      }
       const stream = body.stream !== false;
 
       if (!stream) {
@@ -32,7 +34,7 @@ export function createOpenAIRouter(config: Config): Router {
       res.flushHeaders();
 
       // 1. 使用新的 GeminiApiClient
-      const client = new GeminiApiClient(config);
+      const client = new GeminiApiClient(config, debugMode);
 
       // 2. 发起请求，传递所有相关参数
       const geminiStream = await client.sendMessageStream({
@@ -43,7 +45,7 @@ export function createOpenAIRouter(config: Config): Router {
       });
 
       // 3. 创建转换器和写入器
-      const openAIStream = createOpenAIStreamTransformer(body.model);
+      const openAIStream = createOpenAIStreamTransformer(body.model, debugMode);
       const writer = new WritableStream({
         write(chunk) {
           res.write(chunk);

@@ -68,7 +68,7 @@ async function startMcpServer() {
     process.exit(1);
   }
 
-  console.log('Starting Gemini CLI in MCP Server Mode...');
+  console.log('🚀 Starting Gemini CLI MCP Server...');
 
   // 2. 复用配置加载的核心部分，但手动构造 Config
   const workspaceRoot = process.cwd();
@@ -93,7 +93,9 @@ async function startMcpServer() {
   }
   selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
   await config.refreshAuth(selectedAuthType);
-  console.log(`Using authentication method: ${selectedAuthType}`);
+  if (debugMode) {
+    console.log(`Using authentication method: ${selectedAuthType}`);
+  }
 
   // Check for the custom tools model environment variable
   const toolsDefaultModel = process.env.GEMINI_TOOLS_DEFAULT_MODEL;
@@ -106,7 +108,7 @@ async function startMcpServer() {
   }
 
   // 4. 初始化并启动 MCP 桥接服务 和 OpenAI 服务
-  const mcpBridge = new GcliMcpBridge(config, cliVersion);
+  const mcpBridge = new GcliMcpBridge(config, cliVersion, debugMode);
 
   const app = express();
   app.use(express.json());
@@ -115,7 +117,7 @@ async function startMcpServer() {
   await mcpBridge.start(app); // 修改 start 方法以接收 express app 实例
 
   // 启动 OpenAI 兼容端点
-  const openAIRouter = createOpenAIRouter(config);
+  const openAIRouter = createOpenAIRouter(config, debugMode);
   app.use('/v1', openAIRouter);
 
   app.listen(port, () => {

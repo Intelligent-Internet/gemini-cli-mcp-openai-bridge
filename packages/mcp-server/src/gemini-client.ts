@@ -60,10 +60,12 @@ function sanitizeGeminiSchema(schema: any): any {
 export class GeminiApiClient {
   private readonly config: Config;
   private readonly contentGenerator;
+  private readonly debugMode: boolean;
 
-  constructor(config: Config) {
+  constructor(config: Config, debugMode = false) {
     this.config = config;
     this.contentGenerator = this.config.getGeminiClient().getContentGenerator();
+    this.debugMode = debugMode;
   }
 
   /**
@@ -236,14 +238,22 @@ export class GeminiApiClient {
   }): Promise<AsyncGenerator<StreamChunk>> {
     const history = messages.map(msg => this.openAIMessageToGemini(msg));
     const lastMessage = history.pop();
-    console.log(
-      '[GeminiApiClient] Sending to Gemini. History:',
-      JSON.stringify(history, null, 2),
-    );
-    console.log(
-      '[GeminiApiClient] Last Message:',
-      JSON.stringify(lastMessage, null, 2),
-    );
+    
+    // Always show the model being used
+    console.log(`[GeminiApiClient] Using model: ${model}`);
+    
+    // Only show detailed history in debug mode
+    if (this.debugMode) {
+      console.log(
+        '[GeminiApiClient] History:',
+        JSON.stringify(history, null, 2),
+      );
+      console.log(
+        '[GeminiApiClient] Last Message:',
+        JSON.stringify(lastMessage, null, 2),
+      );
+    }
+    
     if (!lastMessage) {
       throw new Error('No message to send.');
     }
@@ -281,7 +291,10 @@ export class GeminiApiClient {
       },
     });
 
-    console.log('[GeminiApiClient] Got stream from Gemini.');
+    if (this.debugMode) {
+      console.log('[GeminiApiClient] Got stream from Gemini.');
+    }
+    
     // Transform the event stream to a simpler StreamChunk stream
     return (async function* (): AsyncGenerator<StreamChunk> {
       for await (const response of geminiStream) {
