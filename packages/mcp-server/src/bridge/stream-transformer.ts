@@ -1,8 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  GeminiEventType,
-  ServerGeminiStreamEvent,
-} from '@google/gemini-cli-core';
+import { type StreamChunk } from '../types.js';
 
 // --- OpenAI 响应结构接口 ---
 interface OpenAIDelta {
@@ -34,7 +31,7 @@ interface OpenAIChunk {
 // --- 新的、有状态的转换器 ---
 export function createOpenAIStreamTransformer(
   model: string,
-): TransformStream<ServerGeminiStreamEvent, Uint8Array> {
+): TransformStream<StreamChunk, Uint8Array> {
   const chatID = `chatcmpl-${randomUUID()}`;
   const creationTime = Math.floor(Date.now() / 1000);
   const encoder = new TextEncoder();
@@ -67,10 +64,10 @@ export function createOpenAIStreamTransformer(
   };
 
   return new TransformStream({
-    transform(event: ServerGeminiStreamEvent, controller) {
+    transform(chunk: StreamChunk, controller) {
       console.log(
-        `[Stream Transformer] Received event: ${event.type}`,
-        'value' in event && event.value ? JSON.stringify(event.value) : '',
+        `[Stream Transformer] Received chunk: ${chunk.type}`,
+        chunk.data ? JSON.stringify(chunk.data) : '',
       );
       let delta: OpenAIDelta = {};
 
@@ -79,16 +76,16 @@ export function createOpenAIStreamTransformer(
         isFirstChunk = false;
       }
 
-      switch (event.type) {
-        case GeminiEventType.Content:
-          if (event.value) {
-            delta.content = event.value;
+      switch (chunk.type) {
+        case 'text':
+          if (chunk.data) {
+            delta.content = chunk.data;
             enqueueChunk(controller, createChunk(delta));
           }
           break;
 
-        case GeminiEventType.ToolCallRequest: {
-          const { name, args } = event.value;
+        case 'tool_code': {
+          const { name, args } = chunk.data;
           // **重要**: 在 ID 中嵌入函数名，以便在收到工具响应时可以解析它
           const toolCallId = `call_${name}_${randomUUID()}`;
 
@@ -124,16 +121,9 @@ export function createOpenAIStreamTransformer(
           break;
         }
 
-        case GeminiEventType.ChatCompressed:
-        case GeminiEventType.Thought:
+        case 'reasoning':
           // 这些事件目前在 OpenAI 格式中没有直接对应项，可以选择忽略或以某种方式记录
-          console.log(`[Stream Transformer] Ignoring event: ${event.type}`);
-          break;
-
-        // 错误和取消事件应在更高层处理，但为完整性起见
-        case GeminiEventType.Error:
-        case GeminiEventType.UserCancelled:
-          // 可以在这里发送一个带有错误信息的 data chunk，如果需要的话
+          console.log(`[Stream Transformer] Ignoring chunk: ${chunk.type}`);
           break;
       }
     },

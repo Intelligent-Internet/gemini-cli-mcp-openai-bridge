@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Config, GeminiChat } from '@google/gemini-cli-core';
+import {
+  type Config,
+  GeminiChat,
+  GeminiEventType,
+} from '@google/gemini-cli-core';
 import {
   type Content,
   type Part,
@@ -17,6 +21,8 @@ import {
   type OpenAIMessage,
   type MessageContentPart,
   type OpenAIChatCompletionRequest,
+  type StreamChunk,
+  type ReasoningData,
 } from './types.js';
 
 export class GeminiApiClient {
@@ -134,7 +140,7 @@ export class GeminiApiClient {
     messages: OpenAIMessage[];
     tools?: OpenAIChatCompletionRequest['tools'];
     tool_choice?: any;
-  }) {
+  }): Promise<AsyncGenerator<StreamChunk>> {
     const history = messages.map(msg => this.openAIMessageToGemini(msg));
     const lastMessage = history.pop();
     console.log(
@@ -183,6 +189,31 @@ export class GeminiApiClient {
     });
 
     console.log('[GeminiApiClient] Got stream from Gemini.');
-    return geminiStream;
+    // Transform the event stream to a simpler StreamChunk stream
+    return (async function* (): AsyncGenerator<StreamChunk> {
+      for await (const event of geminiStream) {
+        switch (event.type) {
+          case GeminiEventType.Content:
+            if (event.value) {
+              yield { type: 'text', data: event.value };
+            }
+            break;
+          case GeminiEventType.Thought:
+            const reasoningData: ReasoningData = {
+              reasoning: `${event.value.subject}: ${event.value.description}`,
+            };
+            yield { type: 'reasoning', data: reasoningData };
+            break;
+          case GeminiEventType.ToolCallRequest:
+            yield { type: 'tool_code', data: event.value };
+            break;
+          // Ignore other event types for now
+          case GeminiEventType.ChatCompressed:
+          case GeminiEventType.Error:
+          case GeminiEventType.UserCancelled:
+            break;
+        }
+      }
+    })();
   }
 }

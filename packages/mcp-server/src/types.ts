@@ -30,3 +30,12 @@ export interface OpenAIChatCompletionRequest {
   tools?: any[]; // 对应 Gemini 的 Tool[]
   tool_choice?: any; // 对应 Gemini 的 ToolConfig
 }
+
+export interface ReasoningData {
+  reasoning: string;
+}
+
+export type StreamChunk =
+  | { type: 'text'; data: string }
+  | { type: 'reasoning'; data: ReasoningData }
+  | { type: 'tool_code'; data: { name: string; args: Record<string, unknown> } };
