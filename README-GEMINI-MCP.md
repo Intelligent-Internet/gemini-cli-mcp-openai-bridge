@@ -286,7 +286,7 @@ curl -N http://localhost:8765/v1/chat/completions \
 
 ### 遥测 (Telemetry)
 
-`@google/gemini-mcp-server` 本身**不引入任何新的遥测或数据收集机制**。
+`@gemini-community/gemini-mcp-server` 本身**不引入任何新的遥测或数据收集机制**。
 
 它完全依赖于 `@google/gemini-cli-core` 包中内置的 OpenTelemetry (OTEL) 系统。因此，所有的遥测数据（如果启用）都将遵循 `gemini-cli` 的主配置，并被发送到 `settings.json` 文件中指定的目标。
 
@@ -294,15 +294,15 @@ curl -N http://localhost:8765/v1/chat/completions \
 
 ### 服务条款 (Terms of Service) 和隐私声明 (Privacy Notice)
 
-本服务器的使用受制于您用于认证的 `gemini-cli` 账户类型所对应的服务条款和隐私政策。`@google/gemini-mcp-server` 作为一个桥接工具，本身不收集、存储或处理您的任何额外数据。
+本服务器的使用受制于您用于认证的 `gemini-cli` 账户类型所对应的服务条款和隐私政策。`@gemini-community/gemini-mcp-server` 作为一个桥接工具，本身不收集、存储或处理您的任何额外数据。
 
 我们强烈建议您查阅[主 Gemini CLI 服务条款和隐私声明文档](../../docs/tos-privacy.md)以了解适用于您账户的详细信息。
 
 ---
 
-### 开发者说明：关于包名 `@google/gemini-mcp-server`
+### 开发者说明：关于包名 `@gemini-community/gemini-mcp-server`
 
-请注意，本包的名称 `@google/gemini-mcp-server` 反映了它作为官方 `google-gemini/gemini-cli` 的fork项目的 monorepo 内部组件的来源。
+请注意，本包的名称 `@gemini-community/gemini-mcp-server` 表明它是一个由社区维护的包。
 
--   **内部命名**: 在 `gemini-cli` 项目的源代码和工作区中，此命名是内部一致的。
--   **非独立发布**: 此包**不会**作为一个独立的、版本化的包发布到公共 npm registry 上。如果您 fork 本项目并希望独立发布您的修改版本，您**必须**将包名更改为您自己的 scope（例如 `@your-username/gemini-mcp-server`），以遵守 npm 的包命名规范并避免混淆。
+-   **社区驱动**: 此包是 Gemini 社区为扩展 `gemini-cli` 功能所做努力的一部分。
+-   **发布**: 此包可能会以 `@gemini-community` 的 scope 发布到公共 npm registry。如果您 fork 本项目并希望发布您自己的修改版本，您**必须**将包名更改为您自己的 scope（例如 `@your-username/gemini-mcp-server`），以遵守 npm 的包命名规范并避免混淆。
