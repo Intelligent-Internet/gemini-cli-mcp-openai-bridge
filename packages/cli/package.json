@@ -5,9 +5,6 @@
   "repository": "google-gemini/gemini-cli",
   "type": "module",
   "main": "dist/index.js",
-  "exports": {
-    ".": "./dist/index.js"
-  },
   "bin": {
     "gemini": "dist/index.js"
   },

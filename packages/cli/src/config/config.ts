@@ -161,7 +161,6 @@ export async function loadHierarchicalGeminiMemory(
   );
 }
 
-
 export async function loadCliConfig(
   settings: Settings,
   extensions: Extension[],
