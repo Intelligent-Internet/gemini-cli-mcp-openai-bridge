@@ -11,6 +11,7 @@ import {
   type Tool,
   type FunctionDeclaration,
   type GenerateContentConfig,
+  FunctionCallingConfigMode,
 } from '@google/genai';
 import {
   type OpenAIMessage,
@@ -134,7 +135,10 @@ export class GeminiApiClient {
     if (tool_choice && tool_choice !== 'auto') {
       generationConfig.toolConfig = {
         functionCallingConfig: {
-          mode: tool_choice.type === 'function' ? 'ANY' : 'AUTO',
+          mode:
+            tool_choice.type === 'function'
+              ? FunctionCallingConfigMode.ANY
+              : FunctionCallingConfigMode.AUTO,
           allowedFunctionNames: tool_choice.function
             ? [tool_choice.function.name]
             : undefined,

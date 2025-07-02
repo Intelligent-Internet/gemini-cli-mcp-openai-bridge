@@ -1,4 +1,4 @@
-import { GenerateContentResponse } from '@google/genai';
+import { GenerateContentResponse, FinishReason } from '@google/genai';
 import { randomUUID } from 'node:crypto';
 
 // --- 更新的 OpenAI 响应结构接口 ---
@@ -87,7 +87,7 @@ export function createOpenAIStreamTransformer(
           enqueueChunk(controller, createChunk(delta));
         }
 
-        if (part.functionCall) {
+        if (part.functionCall?.name) {
           const fc = part.functionCall;
           const callId = `call_${randomUUID()}`;
 
@@ -130,15 +130,11 @@ export function createOpenAIStreamTransformer(
         }
       }
 
-      if (
-        finishReason &&
-        finishReason !== 'FINISH_REASON_UNSPECIFIED' &&
-        finishReason !== 'NOT_SET'
-      ) {
+      if (finishReason && finishReason !== 'FINISH_REASON_UNSPECIFIED') {
         const reason =
-          finishReason === 'STOP'
+          finishReason === FinishReason.STOP
             ? 'stop'
-            : finishReason === 'TOOL_CALL'
+            : finishReason === FinishReason.TOOL_CALL
               ? 'tool_calls'
               : finishReason.toLowerCase();
         enqueueChunk(controller, createChunk({}, reason));
