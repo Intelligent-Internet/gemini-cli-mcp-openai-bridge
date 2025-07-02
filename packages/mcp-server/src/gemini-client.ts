@@ -73,8 +73,42 @@ export class GeminiApiClient {
    * 将 OpenAI 格式的消息转换为 Gemini 格式的 Content 对象。
    */
   private openAIMessageToGemini(msg: OpenAIMessage): Content {
-    const role = msg.role === 'assistant' ? 'model' : 'user';
+    // Handle assistant messages, which can contain both text and tool calls
+    if (msg.role === 'assistant') {
+      const parts: Part[] = [];
 
+      // Handle text content. It can be null when tool_calls are present.
+      if (msg.content && typeof msg.content === 'string') {
+        parts.push({ text: msg.content });
+      }
+
+      // Handle tool calls
+      if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+        for (const toolCall of msg.tool_calls) {
+          if (toolCall.type === 'function' && toolCall.function) {
+            try {
+              // Gemini API's functionCall.args expects an object, not a string.
+              // OpenAI's arguments is a JSON string, so it needs to be parsed.
+              const argsObject = JSON.parse(toolCall.function.arguments);
+              parts.push({
+                functionCall: {
+                  name: toolCall.function.name,
+                  args: argsObject,
+                },
+              });
+            } catch (e) {
+              console.error(
+                '[GeminiApiClient] Error parsing tool call arguments:',
+                e,
+              );
+            }
+          }
+        }
+      }
+      return { role: 'model', parts };
+    }
+
+    // Handle tool responses
     if (msg.role === 'tool') {
       const functionName = this.parseFunctionNameFromId(msg.tool_call_id || '');
       let responsePayload: Record<string, unknown>;
@@ -113,6 +147,9 @@ export class GeminiApiClient {
         ],
       };
     }
+
+    // Handle user and system messages
+    const role = 'user'; // system and user roles are mapped to 'user'
 
     if (typeof msg.content === 'string') {
       return { role, parts: [{ text: msg.content }] };
