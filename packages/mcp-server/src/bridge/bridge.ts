@@ -7,7 +7,6 @@ import {
   type Tool as GcliTool,
   type ToolResult,
   GeminiChat,
-  getResponseText,
 } from '@google/gemini-cli-core';
 import {
   type CallToolResult,
@@ -165,7 +164,7 @@ export class GcliMcpBridge {
             const request = {
               message: [{ text: args.query as string }],
               config: {
-                tools: [{ googleSearch: {} }], // For web_search
+                tools: [{ googleSearch: {} }] as Tool[], // For web_search
               },
             };
 
@@ -176,8 +175,9 @@ export class GcliMcpBridge {
             }
 
             // Send the request using the one-shot session
-            const response = await oneShotChat.sendMessage(request);
-            const resultText = getResponseText(response) || '';
+            const result = await oneShotChat.sendMessage(request);
+            const response = result.response;
+            const resultText = response.text() || '';
 
             // Convert the result to the MCP format
             const mcpResult = this.convertGcliResultToMcpResult({
