@@ -70,7 +70,7 @@ export function createOpenAIStreamTransformer(
     transform(event: ServerGeminiStreamEvent, controller) {
       console.log(
         `[Stream Transformer] Received event: ${event.type}`,
-        event.value ? JSON.stringify(event.value) : '',
+        'value' in event && event.value ? JSON.stringify(event.value) : '',
       );
       let delta: OpenAIDelta = {};
 

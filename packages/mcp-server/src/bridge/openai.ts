@@ -35,7 +35,7 @@ export function createOpenAIRouter(config: Config): Router {
       const client = new GeminiApiClient(config);
 
       // 2. 发起请求，传递所有相关参数
-      const geminiStream = client.sendMessageStream({
+      const geminiStream = await client.sendMessageStream({
         model: body.model,
         messages: body.messages,
         tools: body.tools,
