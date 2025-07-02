@@ -7,6 +7,7 @@ import {
   type Tool as GcliTool,
   type ToolResult,
   GeminiChat,
+  getResponseText,
 } from '@google/gemini-cli-core';
 import {
   type CallToolResult,
@@ -150,6 +151,52 @@ export class GcliMcpBridge {
         extra: { signal: AbortSignal },
       ) => {
         try {
+          // --- START: Isolation logic for tools that call the LLM ---
+          if (tool.name === 'google_web_search' || tool.name === 'web_fetch') {
+            // Create an isolated, one-shot chat session for this call
+            const oneShotChat = new GeminiChat(
+              this.config,
+              this.config.getGeminiClient().getContentGenerator(),
+              {}, // Use default generationConfig
+              [], // Start with a clean history
+            );
+
+            // Prepare the request for the Gemini API
+            const request = {
+              message: [{ text: args.query as string }],
+              config: {
+                tools: [{ googleSearch: {} }], // For web_search
+              },
+            };
+
+            // Adjust tool config for web_fetch
+            if (tool.name === 'web_fetch') {
+              // web_fetch uses a different tool configuration
+              request.config.tools = [{ urlContext: {} }];
+            }
+
+            // Send the request using the one-shot session
+            const response = await oneShotChat.sendMessage(request);
+            const resultText = getResponseText(response) || '';
+
+            // Convert the result to the MCP format
+            const mcpResult = this.convertGcliResultToMcpResult({
+              llmContent: resultText,
+              returnDisplay: `Search results for "${args.query}" returned.`,
+            });
+
+            // Attach grounding metadata if it exists
+            if (response.candidates?.[0]?.groundingMetadata) {
+              (mcpResult as any)._meta = {
+                groundingMetadata: response.candidates[0].groundingMetadata,
+              };
+            }
+
+            return mcpResult;
+          }
+          // --- END: Isolation logic ---
+
+          // For other tools that don't call the LLM, use the original execute method
           const result = await tool.execute(args, extra.signal);
           return this.convertGcliResultToMcpResult(result);
         } catch (e) {
@@ -158,7 +205,8 @@ export class GcliMcpBridge {
             `${LOG_PREFIX} Error executing tool '${tool.name}': ${errorMessage}`,
           );
 
-          // 简单地抛出一个Error，MCP SDK会自动处理为适当的JSON-RPC错误
+          // Simply throw an Error, and the MCP SDK will automatically handle it
+          // as an appropriate JSON-RPC error.
           throw new Error(
             `Error executing tool '${tool.name}': ${errorMessage}`,
           );
