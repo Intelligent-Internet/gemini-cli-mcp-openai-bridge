@@ -20,6 +20,7 @@ import {
   type StreamChunk,
   type ReasoningData,
 } from './types.js';
+import { logger } from './utils/logger.js';
 
 /**
  * Recursively removes fields from a JSON schema that are not supported by the
@@ -140,8 +141,11 @@ export class GeminiApiClient {
                 },
               });
             } catch (e) {
-              console.error(
-                '[GeminiApiClient] Error parsing tool call arguments:',
+              logger.warn(
+                'Failed to parse tool call arguments',
+                {
+                  arguments: toolCall.function.arguments,
+                },
                 e,
               );
             }
@@ -238,22 +242,14 @@ export class GeminiApiClient {
   }): Promise<AsyncGenerator<StreamChunk>> {
     const history = messages.map(msg => this.openAIMessageToGemini(msg));
     const lastMessage = history.pop();
-    
-    // Always show the model being used
-    console.log(`[GeminiApiClient] Using model: ${model}`);
-    
-    // Only show detailed history in debug mode
-    if (this.debugMode) {
-      console.log(
-        '[GeminiApiClient] History:',
-        JSON.stringify(history, null, 2),
-      );
-      console.log(
-        '[GeminiApiClient] Last Message:',
-        JSON.stringify(lastMessage, null, 2),
-      );
-    }
-    
+
+    logger.info('Calling Gemini API', { model });
+
+    logger.debug(this.debugMode, 'Sending request to Gemini', {
+      historyLength: history.length,
+      lastMessage,
+    });
+
     if (!lastMessage) {
       throw new Error('No message to send.');
     }
@@ -291,10 +287,8 @@ export class GeminiApiClient {
       },
     });
 
-    if (this.debugMode) {
-      console.log('[GeminiApiClient] Got stream from Gemini.');
-    }
-    
+    logger.debug(this.debugMode, 'Got stream from Gemini.');
+
     // Transform the event stream to a simpler StreamChunk stream
     return (async function* (): AsyncGenerator<StreamChunk> {
       for await (const response of geminiStream) {

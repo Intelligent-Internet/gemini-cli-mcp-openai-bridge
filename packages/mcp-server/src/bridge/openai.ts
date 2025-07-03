@@ -4,19 +4,30 @@ import { createOpenAIStreamTransformer } from './stream-transformer.js';
 import { GeminiApiClient } from '../gemini-client.js'; // <-- 引入新类
 import { type OpenAIChatCompletionRequest } from '../types.js'; // <-- 引入新类型
 import { mapErrorToOpenAIError } from '../utils/error-mapper.js';
+import { logger } from '../utils/logger.js';
+import { randomUUID } from 'node:crypto';
 
 export function createOpenAIRouter(config: Config, debugMode = false): Router {
   const router = Router();
 
+  // 中间件：为每个请求添加 requestId
+  router.use((req, res, next) => {
+    (req as any).requestId = randomUUID();
+    next();
+  });
+
   router.post('/chat/completions', async (req: Request, res: Response) => {
+    const requestId = (req as any).requestId;
+    const startTime = Date.now();
     try {
       const body = req.body as OpenAIChatCompletionRequest;
-      if (debugMode) {
-        console.log(
-          '[OpenAI Bridge] Received /chat/completions request:',
-          JSON.stringify(body, null, 2),
-        );
-      }
+
+      logger.info('OpenAI bridge request received', {
+        requestId,
+        model: body.model,
+        stream: body.stream,
+      });
+      logger.debug(debugMode, 'Request body:', { requestId, body });
       const stream = body.stream !== false;
 
       if (!stream) {
@@ -75,9 +86,19 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
       }
       // --- 修正结束 ---
 
+      const durationMs = Date.now() - startTime;
+      logger.info('OpenAI bridge request finished', {
+        requestId,
+        status: 'success',
+        durationMs,
+      });
       res.end();
     } catch (e: unknown) {
-      console.error('[OpenAI Bridge] Error:', e);
+      const durationMs = Date.now() - startTime;
+      logger.error('OpenAI bridge request failed', e as Error, {
+        requestId,
+        durationMs,
+      });
 
       // 调用新的错误映射函数
       const { openAIError, statusCode } = mapErrorToOpenAIError(e);

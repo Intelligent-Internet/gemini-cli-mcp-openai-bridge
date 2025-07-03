@@ -16,12 +16,7 @@ import { loadServerConfig } from './config/config.js';
 import { GcliMcpBridge } from './bridge/bridge.js';
 import { createOpenAIRouter } from './bridge/openai.js';
 import express from 'express';
-
-// Simple console logger for now
-const logger = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warn: (...args: any[]) => console.warn('[WARN]', ...args),
-};
+import { logger } from './utils/logger.js';
 
 function mergeMcpServers(
   settings: Settings,
@@ -64,11 +59,13 @@ async function startMcpServer() {
   const debugMode = args.includes('--debug');
 
   if (isNaN(port)) {
-    console.error('Invalid port number provided. Use --port=<number> or set GEMINI_MCP_PORT environment variable.');
+    logger.error(
+      'Invalid port number provided. Use --port=<number> or set GEMINI_MCP_PORT environment variable.',
+    );
     process.exit(1);
   }
 
-  console.log('🚀 Starting Gemini CLI MCP Server...');
+  logger.info('Starting Gemini CLI MCP Server...');
 
   // 2. 复用配置加载的核心部分，但手动构造 Config
   const workspaceRoot = process.cwd();
@@ -86,19 +83,17 @@ async function startMcpServer() {
   // Initialize Auth - this is critical to initialize the tool registry and gemini client
   let selectedAuthType = settings.merged.selectedAuthType;
   if (!selectedAuthType && !process.env.GEMINI_API_KEY) {
-    console.error(
+    logger.error(
       'Auth missing: Please set `selectedAuthType` in .gemini/settings.json or set the GEMINI_API_KEY environment variable.',
     );
     process.exit(1);
   }
   selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
   await config.refreshAuth(selectedAuthType);
-  if (debugMode) {
-    console.log(`Using authentication method: ${selectedAuthType}`);
-  }
+  logger.debug(debugMode, `Using authentication method: ${selectedAuthType}`);
 
   // Log the model being used for tools. This is now set in loadServerConfig.
-  console.log(`⚙️  Using model for tools: ${config.getModel()}`);
+  logger.debug(debugMode, `Using model for tools: ${config.getModel()}`);
 
   // 4. 初始化并启动 MCP 桥接服务 和 OpenAI 服务
   const mcpBridge = new GcliMcpBridge(config, cliVersion, debugMode);
@@ -114,17 +109,15 @@ async function startMcpServer() {
   app.use('/v1', openAIRouter);
 
   app.listen(port, () => {
-    console.log(
-      `🚀 Gemini CLI MCP Server and OpenAI Bridge are running on port ${port}`,
-    );
-    console.log(`   - MCP transport listening on http://localhost:${port}/mcp`);
-    console.log(
-      `   - OpenAI-compatible endpoints available at http://localhost:${port}/v1`,
-    );
+    logger.info('Server running', {
+      port,
+      mcpUrl: `http://localhost:${port}/mcp`,
+      openAIUrl: `http://localhost:${port}/v1`,
+    });
   });
 }
 
 startMcpServer().catch(error => {
-  console.error('Failed to start Gemini CLI MCP Bridge:', error);
+  logger.error('Failed to start Gemini CLI MCP Bridge:', error);
   process.exit(1);
 });

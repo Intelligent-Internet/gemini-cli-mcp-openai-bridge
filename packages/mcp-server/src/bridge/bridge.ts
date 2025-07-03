@@ -21,15 +21,7 @@ import {
   type Content,
 } from '@google/genai';
 import { randomUUID } from 'node:crypto';
-
-const LOG_PREFIX = '[MCP SERVER]';
-
-const requestLogger = (debugMode: boolean) => (req: Request, res: Response, next: NextFunction) => {
-  if (debugMode) {
-    console.log(`${LOG_PREFIX} ${req.method} ${req.url}`);
-  }
-  next();
-};
+import { logger } from '../utils/logger.js';
 
 export class GcliMcpBridge {
   private readonly config: Config;
@@ -62,11 +54,6 @@ export class GcliMcpBridge {
   }
 
   public async start(app: Application) {
-
-    if (this.debugMode) {
-      app.use(requestLogger(this.debugMode));
-    }
-
     app.all('/mcp', async (req: Request, res: Response) => {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
@@ -75,23 +62,21 @@ export class GcliMcpBridge {
 
       if (!session) {
         if (isInitializeRequest(req.body)) {
-          if (this.debugMode) {
-            console.log(
-              `${LOG_PREFIX} Creating new session and transport for initialize request`,
-            );
-          }
+          logger.debug(
+            this.debugMode,
+            'Creating new session and transport for initialize request',
+          );
 
           try {
             // **修改 6: 为新会话创建独立的 McpServer 和 Transport**
             const newMcpServer = await this.createNewMcpServer();
             const newTransport = new StreamableHTTPServerTransport({
               sessionIdGenerator: () => randomUUID(),
-              onsessioninitialized: (newSessionId) => {
-                if (this.debugMode) {
-                  console.log(
-                    `${LOG_PREFIX} Session initialized: ${newSessionId}`,
-                  );
-                }
+              onsessioninitialized: newSessionId => {
+                logger.debug(
+                  this.debugMode,
+                  `Session initialized: ${newSessionId}`,
+                );
                 // 存储新的会话对象
                 this.sessions[newSessionId] = {
                   mcpServer: newMcpServer,
@@ -103,11 +88,10 @@ export class GcliMcpBridge {
             newTransport.onclose = () => {
               const sid = newTransport.sessionId;
               if (sid && this.sessions[sid]) {
-                if (this.debugMode) {
-                  console.log(
-                    `${LOG_PREFIX} Session ${sid} closed, removing session object.`,
-                  );
-                }
+                logger.debug(
+                  this.debugMode,
+                  `Session ${sid} closed, removing session object.`,
+                );
                 delete this.sessions[sid];
               }
             };
@@ -118,15 +102,15 @@ export class GcliMcpBridge {
             session = { mcpServer: newMcpServer, transport: newTransport };
           } catch (e) {
             // Handle errors during server creation
-            console.error(`${LOG_PREFIX} Error creating new MCP session:`, e);
+            logger.error('Error creating new MCP session:', e);
             if (!res.headersSent) {
               res.status(500).json({ error: 'Failed to create session' });
             }
             return;
           }
         } else {
-          console.error(
-            `${LOG_PREFIX} Bad Request: Missing session ID for non-initialize request.`,
+          logger.error(
+            'Bad Request: Missing session ID for non-initialize request.',
           );
           res.status(400).json({
             jsonrpc: '2.0',
@@ -138,9 +122,10 @@ export class GcliMcpBridge {
           });
           return;
         }
-      } else if (this.debugMode) {
-        console.log(
-          `${LOG_PREFIX} Reusing transport and server for session: ${sessionId}`,
+      } else {
+        logger.debug(
+          this.debugMode,
+          `Reusing transport and server for session: ${sessionId}`,
         );
       }
 
@@ -148,7 +133,7 @@ export class GcliMcpBridge {
         // **修改 7: 使用会话特定的 transport 来处理请求**
         await session.transport.handleRequest(req, res, req.body);
       } catch (e) {
-        console.error(`${LOG_PREFIX} Error handling request:`, e);
+        logger.error('Error handling request:', e);
         if (!res.headersSent) {
           res.status(500).end();
         }
@@ -173,11 +158,10 @@ export class GcliMcpBridge {
 
       // 如果为这些工具设置了专用的模型，则创建一个新的配置和工具实例
       if (toolModel) {
-        if (this.debugMode) {
-          console.log(
-            `[MCP SERVER] Using custom model "${toolModel}" for tool "${tool.name}"`,
-          );
-        }
+        logger.debug(
+          this.debugMode,
+          `Using custom model "${toolModel}" for tool "${tool.name}"`,
+        );
 
         // 步骤 1: 创建一个 this.config 的代理。
         // 这个代理对象会拦截对 getModel 方法的调用。
@@ -212,6 +196,8 @@ export class GcliMcpBridge {
         args: Record<string, unknown>,
         extra: { signal: AbortSignal },
       ) => {
+        const startTime = Date.now();
+        logger.info('MCP tool call started', { toolName: tool.name, args });
         try {
           // *** 关键：现在所有工具都通过这个统一的路径执行 ***
           // toolInstanceForExecution 要么是原始工具，要么是带有自定义模型配置的新实例
@@ -219,15 +205,20 @@ export class GcliMcpBridge {
             args,
             extra.signal,
           );
+          const durationMs = Date.now() - startTime;
+          logger.info('MCP tool call finished', {
+            toolName: tool.name,
+            status: 'success',
+            durationMs,
+          });
           return this.convertGcliResultToMcpResult(result);
         } catch (e) {
-          const errorMessage = e instanceof Error ? e.message : String(e);
-          console.error(
-            `${LOG_PREFIX} Error executing tool '${tool.name}': ${errorMessage}`,
-          );
-          throw new Error(
-            `Error executing tool '${tool.name}': ${errorMessage}`,
-          );
+          const durationMs = Date.now() - startTime;
+          logger.error('MCP tool call failed', e as Error, {
+            toolName: tool.name,
+            durationMs,
+          });
+          throw e; // 重新抛出错误，让 MCP SDK 处理
         }
       },
     );
