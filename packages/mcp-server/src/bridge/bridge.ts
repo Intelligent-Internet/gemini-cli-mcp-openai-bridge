@@ -7,6 +7,8 @@ import {
   type Tool as GcliTool,
   type ToolResult,
   GeminiChat,
+  WebFetchTool, // <--- 添加这个导入
+  WebSearchTool, // <--- 添加这个导入
 } from '@google/gemini-cli-core';
 import {
   type CallToolResult,
@@ -163,76 +165,66 @@ export class GcliMcpBridge {
   }
 
   private registerGcliTool(tool: GcliTool, mcpServer: McpServer) {
-    const inputSchema = this.convertJsonSchemaToZod(tool.schema.parameters);
+    let toolInstanceForExecution = tool; // 默认使用从 ToolRegistry 传入的原始工具实例
+
+    // 检查是否是需要特殊处理的网页工具
+    if (tool.name === 'google_web_search' || tool.name === 'web_fetch') {
+      const toolModel = process.env.GEMINI_TOOLS_DEFAULT_MODEL;
+
+      // 如果为这些工具设置了专用的模型，则创建一个新的配置和工具实例
+      if (toolModel) {
+        if (this.debugMode) {
+          console.log(
+            `[MCP SERVER] Using custom model "${toolModel}" for tool "${tool.name}"`,
+          );
+        }
+
+        // 步骤 1: 创建一个 this.config 的代理。
+        // 这个代理对象会拦截对 getModel 方法的调用。
+        const proxyConfig = new Proxy(this.config, {
+          get: (target, prop, receiver) => {
+            // 如果调用的方法是 getModel，则返回我们指定的工具模型
+            if (prop === 'getModel') {
+              return () => toolModel;
+            }
+            // 对于所有其他属性和方法的调用，都代理到原始的 config 对象
+            return Reflect.get(target, prop, receiver);
+          },
+        }) as Config;
+
+        // 步骤 2: 根据工具名称，使用这个代理配置来创建新的工具实例
+        if (tool.name === 'google_web_search') {
+          toolInstanceForExecution = new WebSearchTool(proxyConfig);
+        } else {
+          toolInstanceForExecution = new WebFetchTool(proxyConfig);
+        }
+      }
+    }
 
     mcpServer.registerTool(
       tool.name,
       {
         title: tool.displayName,
         description: tool.description,
-        inputSchema: inputSchema,
+        inputSchema: this.convertJsonSchemaToZod(tool.schema.parameters),
       },
       async (
         args: Record<string, unknown>,
         extra: { signal: AbortSignal },
       ) => {
         try {
-          // --- START: Isolation logic for tools that call the LLM ---
-          if (tool.name === 'google_web_search' || tool.name === 'web_fetch') {
-            // Create an isolated, one-shot chat session for this call
-            const oneShotChat = new GeminiChat(
-              this.config,
-              this.config.getGeminiClient().getContentGenerator(),
-              {}, // Use default generationConfig
-              [], // Start with a clean history
-            );
-
-            // Prepare the request for the Gemini API
-            const request = {
-              message: [{ text: args.query as string }],
-              config: {
-                tools: [{ googleSearch: {} }] as Tool[], // For web_search
-              },
-            };
-
-            // Adjust tool config for web_fetch
-            if (tool.name === 'web_fetch') {
-              // web_fetch uses a different tool configuration
-              request.config.tools = [{ urlContext: {} }];
-            }
-
-            // Send the request using the one-shot session
-            const response = await oneShotChat.sendMessage(request);
-            const resultText = response.text || '';
-
-            // Convert the result to the MCP format
-            const mcpResult = this.convertGcliResultToMcpResult({
-              llmContent: resultText,
-              returnDisplay: `Search results for "${args.query}" returned.`,
-            });
-
-            // Attach grounding metadata if it exists
-            if (response.candidates?.[0]?.groundingMetadata) {
-              (mcpResult as any)._meta = {
-                groundingMetadata: response.candidates[0].groundingMetadata,
-              };
-            }
-
-            return mcpResult;
-          }
-          // --- END: Isolation logic ---
-
-          // For other tools that don't call the LLM, use the original execute method
-          const result = await tool.execute(args, extra.signal);
+          // *** 关键：现在所有工具都通过这个统一的路径执行 ***
+          // toolInstanceForExecution 要么是原始工具，要么是带有自定义模型配置的新实例
+          const result = await toolInstanceForExecution.execute(
+            args,
+            extra.signal,
+          );
           return this.convertGcliResultToMcpResult(result);
         } catch (e) {
           const errorMessage = e instanceof Error ? e.message : String(e);
           console.error(
             `${LOG_PREFIX} Error executing tool '${tool.name}': ${errorMessage}`,
           );
-
-          // Simply throw an Error, and the MCP SDK will automatically handle it
-          // as an appropriate JSON-RPC error.
           throw new Error(
             `Error executing tool '${tool.name}': ${errorMessage}`,
           );
