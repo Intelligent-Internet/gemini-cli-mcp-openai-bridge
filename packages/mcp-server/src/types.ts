@@ -61,3 +61,24 @@ export type StreamChunk =
   | { type: 'text'; data: string }
   | { type: 'reasoning'; data: ReasoningData }
   | { type: 'tool_code'; data: { name: string; args: Record<string, unknown> } };
+
+/**
+ * 定义了 OpenAI API 兼容的错误对象结构。
+ */
+export interface OpenAIError {
+  message: string;
+  type:
+    | 'invalid_request_error'
+    | 'api_error'
+    | 'authentication_error'
+    | 'server_error';
+  param: string | null;
+  code: string | null;
+}
+
+/**
+ * 定义了完整的 OpenAI API 错误响应结构。
+ */
+export interface OpenAIErrorResponse {
+  error: OpenAIError;
+}

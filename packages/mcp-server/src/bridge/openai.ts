@@ -3,6 +3,7 @@ import { type Config } from '@google/gemini-cli-core';
 import { createOpenAIStreamTransformer } from './stream-transformer.js';
 import { GeminiApiClient } from '../gemini-client.js'; // <-- 引入新类
 import { type OpenAIChatCompletionRequest } from '../types.js'; // <-- 引入新类型
+import { mapErrorToOpenAIError } from '../utils/error-mapper.js';
 
 export function createOpenAIRouter(config: Config, debugMode = false): Router {
   const router = Router();
@@ -75,44 +76,18 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
       // --- 修正结束 ---
 
       res.end();
-    } catch (error) {
-      console.error('[OpenAI Bridge] Error:', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'An unknown error occurred';
+    } catch (e: unknown) {
+      console.error('[OpenAI Bridge] Error:', e);
 
-      // [MODIFICATION] 检查错误类型并设置适当的状态码
-      let statusCode = 500; // 默认为内部服务器错误
-      if (error instanceof Error) {
-        // 检查 gaxios 或类似 HTTP 客户端可能附加的 status 属性
-        const status = (error as any).status;
-        if (status === 429) {
-          statusCode = 429;
-        } else if (typeof status === 'number' && status >= 400 && status < 500) {
-          statusCode = status;
-        }
-        // 也可以通过检查消息内容来增加健壮性
-        else if (
-          errorMessage.includes('429') ||
-          errorMessage.toLowerCase().includes('quota')
-        ) {
-          statusCode = 429;
-        }
-      }
+      // 调用新的错误映射函数
+      const { openAIError, statusCode } = mapErrorToOpenAIError(e);
 
+      // 使用映射后的状态码和错误对象进行响应
       if (!res.headersSent) {
-        // 使用动态的状态码
-        res.status(statusCode).json({
-          error: {
-            message: errorMessage,
-            type: 'gemini_api_error',
-            code: statusCode, // 在响应体中也反映出来
-          },
-        });
+        res.status(statusCode).json(openAIError);
       } else {
         // 如果流已经开始，我们无法改变状态码，但可以在流中发送错误
-        res.write(
-          `data: ${JSON.stringify({ error: errorMessage, code: statusCode })}\n\n`,
-        );
+        res.write(`data: ${JSON.stringify({ error: openAIError.error })}\n\n`);
         res.end();
       }
     }
