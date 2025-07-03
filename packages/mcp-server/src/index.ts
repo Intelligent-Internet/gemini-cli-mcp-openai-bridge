@@ -104,7 +104,7 @@ async function startMcpServer() {
   const mcpBridge = new GcliMcpBridge(config, cliVersion, debugMode);
 
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
 
   // 启动 MCP 服务 (这是 GcliMcpBridge 的一部分，我们需要把它集成到主 app 中)
   await mcpBridge.start(app); // 修改 start 方法以接收 express app 实例
