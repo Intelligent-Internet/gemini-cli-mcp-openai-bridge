@@ -11,7 +11,7 @@ import {
   getCurrentGeminiMdFilename,
   ApprovalMode,
   GEMINI_CONFIG_DIR as GEMINI_DIR,
-  DEFAULT_GEMINI_MODEL,
+  DEFAULT_GEMINI_FLASH_MODEL,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   FileDiscoveryService,
   TelemetryTarget,
@@ -97,7 +97,7 @@ export async function loadServerConfig(
   const model =
     process.env.GEMINI_TOOLS_DEFAULT_MODEL ||
     process.env.GEMINI_MODEL ||
-    DEFAULT_GEMINI_MODEL;
+    DEFAULT_GEMINI_FLASH_MODEL;
 
   return new Config({
     sessionId,
