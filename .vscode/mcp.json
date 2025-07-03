@@ -1,7 +1,0 @@
-{
-    "servers": {
-        "gemini-cli": {
-            "url": "http://localhost:8765/mcp"
-        }
-    }
-}
