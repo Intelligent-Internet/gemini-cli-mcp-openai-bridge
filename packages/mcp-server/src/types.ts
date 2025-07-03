@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// OpenAI 请求体中的消息内容部分
 export interface MessageContentPart {
   type: 'text' | 'image_url';
   text?: string;
@@ -14,29 +13,29 @@ export interface MessageContentPart {
   };
 }
 
-// OpenAI 工具调用对象
 export interface OpenAIToolCall {
   id: string;
   type: 'function';
   function: {
     name: string;
-    arguments: string; // 这是一个 JSON 字符串
+    /** A JSON string of arguments. */
+    arguments: string;
   };
 }
 
-// OpenAI 请求体中的消息对象
 export interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null | MessageContentPart[]; // 当 tool_calls 存在时，content 可能为 null
+  /** Can be null when tool_calls are present. */
+  content: string | null | MessageContentPart[];
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
 }
 
-// OpenAI 工具定义
 export interface OpenAIFunction {
   name: string;
   description?: string;
-  parameters: Record<string, unknown>; // JSON Schema object
+  /** JSON Schema object */
+  parameters: Record<string, unknown>;
 }
 
 export interface OpenAITool {
@@ -44,13 +43,14 @@ export interface OpenAITool {
   function: OpenAIFunction;
 }
 
-// OpenAI Chat Completion 请求体
 export interface OpenAIChatCompletionRequest {
   model: string;
   messages: OpenAIMessage[];
   stream?: boolean;
-  tools?: OpenAITool[]; // 对应 Gemini 的 Tool[]
-  tool_choice?: any; // 对应 Gemini 的 ToolConfig
+  /** Corresponds to Gemini's Tool[] */
+  tools?: OpenAITool[];
+  /** Corresponds to Gemini's ToolConfig */
+  tool_choice?: any;
 }
 
 export interface ReasoningData {
@@ -63,7 +63,7 @@ export type StreamChunk =
   | { type: 'tool_code'; data: { name: string; args: Record<string, unknown> } };
 
 /**
- * 定义了 OpenAI API 兼容的错误对象结构。
+ * Defines the structure of an OpenAI API-compatible error object.
  */
 export interface OpenAIError {
   message: string;
@@ -77,7 +77,7 @@ export interface OpenAIError {
 }
 
 /**
- * 定义了完整的 OpenAI API 错误响应结构。
+ * Defines the complete OpenAI API error response structure.
  */
 export interface OpenAIErrorResponse {
   error: OpenAIError;

@@ -3,7 +3,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   ListToolsResultSchema,
   type Notification,
-} from '@modelcontextprotocol/sdk/types.js'; // <--- 引入 Notification 类型
+} from '@modelcontextprotocol/sdk/types.js';
 import { URL } from 'url';
 import { z } from 'zod';
 import OpenAI from 'openai';
@@ -14,16 +14,15 @@ const TextContentBlockSchema = z.object({
   text: z.string(),
 });
 
-// --- 配置 ---
+// --- CONFIG ---
 const SERVER_URL = 'http://localhost:8765/mcp';
 const LOG_PREFIX = '[TEST CLIENT]';
-// -------------
 
 function logWithPrefix(...args: unknown[]) {
   console.log(LOG_PREFIX, ...args);
 }
 
-// --- 猴子补丁 fetch ---
+// --- Monkey-patch fetch for logging ---
 const originalFetch = global.fetch;
 global.fetch = async (url, options) => {
   logWithPrefix('➡️  FETCHING:', options?.method || 'GET', url.toString());
@@ -75,7 +74,7 @@ global.fetch = async (url, options) => {
 
   return response;
 };
-// -----------------------
+// ------------------------------------
 
 async function runTestClient() {
   logWithPrefix('🚀 Starting MCP Test Client...');
@@ -90,15 +89,12 @@ async function runTestClient() {
     console.error(`${LOG_PREFIX} 💥 Client-level Error:`, error);
   };
 
-  // --- 修正的部分 ---
-  // 将参数类型从 JSONRPCMessage 改为 Notification
   client.fallbackNotificationHandler = async (notification: Notification) => {
     logWithPrefix(
       `📡 Received Unhandled Notification:`,
       JSON.stringify(notification, null, 2),
     );
   };
-  // -------------------
 
   logWithPrefix('🚌 Creating StreamableHTTPClientTransport...');
   const transport = new StreamableHTTPClientTransport(new URL(SERVER_URL));

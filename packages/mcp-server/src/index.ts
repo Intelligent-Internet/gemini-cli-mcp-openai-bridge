@@ -42,11 +42,11 @@ function mergeMcpServers(
 }
 
 async function startMcpServer() {
-  // 1. 独立的、简单的参数解析
+  // Simple, standalone argument parsing.
   const args = process.argv.slice(2);
   const portArg = args.find(arg => arg.startsWith('--port='));
   
-  // 支持环境变量 GEMINI_MCP_PORT，优先级：命令行参数 > 环境变量 > 默认值
+  // Support GEMINI_MCP_PORT env var. Priority: CLI arg > env var > default.
   let port: number;
   if (portArg) {
     port = parseInt(portArg.split('=')[1], 10);
@@ -67,7 +67,7 @@ async function startMcpServer() {
 
   logger.info('Starting Gemini CLI MCP Server...');
 
-  // 2. 复用配置加载的核心部分，但手动构造 Config
+  // Reuse core config loading, but manually construct Config.
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
   const extensions = loadExtensions(workspaceRoot);
@@ -95,16 +95,16 @@ async function startMcpServer() {
   // Log the model being used for tools. This is now set in loadServerConfig.
   logger.debug(debugMode, `Using model for tools: ${config.getModel()}`);
 
-  // 4. 初始化并启动 MCP 桥接服务 和 OpenAI 服务
+  // Initialize and start MCP Bridge and OpenAI services.
   const mcpBridge = new GcliMcpBridge(config, cliVersion, debugMode);
 
   const app = express();
   app.use(express.json({ limit: '50mb' }));
 
-  // 启动 MCP 服务 (这是 GcliMcpBridge 的一部分，我们需要把它集成到主 app 中)
-  await mcpBridge.start(app); // 修改 start 方法以接收 express app 实例
+  // Start the MCP service.
+  await mcpBridge.start(app);
 
-  // 启动 OpenAI 兼容端点
+  // Start OpenAI compatible endpoint.
   const openAIRouter = createOpenAIRouter(config, debugMode);
   app.use('/v1', openAIRouter);
 

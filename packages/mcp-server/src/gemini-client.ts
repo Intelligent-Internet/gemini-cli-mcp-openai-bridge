@@ -70,7 +70,7 @@ export class GeminiApiClient {
   }
 
   /**
-   * 将 OpenAI 的工具定义转换为 Gemini 的工具定义。
+   * Converts OpenAI tool definitions to Gemini tool definitions.
    */
   private convertOpenAIToolsToGemini(
     openAITools?: OpenAIChatCompletionRequest['tools'],
@@ -100,21 +100,21 @@ export class GeminiApiClient {
   }
 
   /**
-   * 从 tool_call_id 中解析出原始的函数名。
-   * ID 格式为 "call_{functionName}_{uuid}"
+   * Parses the original function name from a tool_call_id.
+   * ID format: "call_{functionName}_{uuid}"
    */
   private parseFunctionNameFromId(toolCallId: string): string {
     const parts = toolCallId.split('_');
     if (parts.length > 2 && parts[0] === 'call') {
-      // 重新组合可能包含下划线的函数名
+      // Reassemble the function name which might contain underscores.
       return parts.slice(1, parts.length - 1).join('_');
     }
-    // 回退机制，虽然不理想，但比发送错误名称要好
+    // Fallback mechanism, not ideal but better than sending a wrong name.
     return 'unknown_tool_from_id';
   }
 
   /**
-   * 将 OpenAI 格式的消息转换为 Gemini 格式的 Content 对象。
+   * Converts an OpenAI-formatted message to a Gemini-formatted Content object.
    */
   private openAIMessageToGemini(msg: OpenAIMessage): Content {
     // Handle assistant messages, which can contain both text and tool calls
@@ -181,11 +181,10 @@ export class GeminiApiClient {
       }
 
       return {
-        role: 'user', // Gemini uses 'user' role to hold a functionResponse
+        role: 'function', // Gemini uses the 'function' role to hold a functionResponse
         parts: [
           {
             functionResponse: {
-              id: msg.tool_call_id,
               name: functionName,
               // Pass the parsed or wrapped object as the response value.
               response: responsePayload,
@@ -213,7 +212,7 @@ export class GeminiApiClient {
             const mimeType = mimePart.split(':')[1].split(';')[0];
             acc.push({ inlineData: { mimeType, data: dataPart } });
           } else {
-            // Gemini API 更喜欢 inlineData，但 fileData 也可以作为备选
+            // Gemini API prefers inlineData, but fileData is a possible fallback.
             acc.push({ fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } });
           }
         }
@@ -227,7 +226,7 @@ export class GeminiApiClient {
   }
 
   /**
-   * 发起流式请求到 Gemini API
+   * Sends a streaming request to the Gemini API.
    */
   public async sendMessageStream({
     model,
@@ -254,7 +253,7 @@ export class GeminiApiClient {
       throw new Error('No message to send.');
     }
 
-    // 为每个请求创建一个新的、独立的聊天会话
+    // Create a new, isolated chat session for each request.
     const oneShotChat = new GeminiChat(
       this.config,
       this.contentGenerator,

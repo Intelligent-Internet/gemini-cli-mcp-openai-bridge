@@ -1,9 +1,10 @@
 import { type OpenAIError, type OpenAIErrorResponse } from '../types.js';
 
 /**
- * 将从 Gemini API 或身份验证流程中捕获的错误映射为标准的 OpenAI 错误对象和对应的 HTTP 状态码。
- * @param error 捕获到的未知错误。
- * @returns 一个包含标准 OpenAI 错误对象和建议的 HTTP 状态码的对象。
+ * Maps a caught error from the Gemini API or auth flow to a standard
+ * OpenAI error object and a corresponding HTTP status code.
+ * @param error The caught unknown error.
+ * @returns An object containing the standard OpenAI error and a suggested status code.
  */
 export function mapErrorToOpenAIError(error: unknown): {
   openAIError: OpenAIErrorResponse;
@@ -17,7 +18,7 @@ export function mapErrorToOpenAIError(error: unknown): {
   if (error instanceof Error) {
     message = error.message;
 
-    // 检查特定的错误类型或消息内容来确定更精确的错误码
+    // Check for specific error messages to determine a more accurate error code.
     if (message.includes('Authentication failed')) {
       statusCode = 401;
       type = 'authentication_error';
@@ -45,14 +46,15 @@ export function mapErrorToOpenAIError(error: unknown): {
       type = 'server_error';
       code = 'server_error';
     }
-    // 可以根据需要添加更多针对 Gemini 特定错误的映射
+    // More Gemini-specific error mappings can be added here if needed.
   }
 
   const openAIError: OpenAIErrorResponse = {
     error: {
       message,
       type,
-      param: null, // 在这个场景下，我们通常不知道是哪个具体参数出错，所以设为 null
+      // We generally don't know the specific parameter that caused the error in this context.
+      param: null,
       code,
     },
   };

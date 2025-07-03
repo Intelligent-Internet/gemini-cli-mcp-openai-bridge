@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { type StreamChunk } from '../types.js';
 
-// --- OpenAI 响应结构接口 ---
+// --- OpenAI Response Interfaces ---
 interface OpenAIDelta {
   role?: 'assistant';
   content?: string | null;
@@ -28,7 +28,7 @@ interface OpenAIChunk {
   }[];
 }
 
-// --- 新的、有状态的转换器 ---
+// --- New Stateful Transformer ---
 export function createOpenAIStreamTransformer(
   model: string,
   debugMode = false,
@@ -89,13 +89,13 @@ export function createOpenAIStreamTransformer(
 
         case 'tool_code': {
           const { name, args } = chunk.data;
-          // **重要**: 在 ID 中嵌入函数名，以便在收到工具响应时可以解析它
+          // IMPORTANT: Embed the function name in the ID so it can be parsed when a tool response is received.
           const toolCallId = `call_${name}_${randomUUID()}`;
 
-          // OpenAI 流式工具调用需要分块发送
-          // 1. 发送包含函数名的块
+          // OpenAI streaming tool calls need to be sent in chunks.
+          // 1. Send the chunk containing the function name.
           const nameDelta: OpenAIDelta = {
-            ...delta, // 包含 role (如果是第一个块)
+            ...delta, // Include role if it's the first chunk
             tool_calls: [
               {
                 index: toolCallIndex,
@@ -107,7 +107,7 @@ export function createOpenAIStreamTransformer(
           };
           enqueueChunk(controller, createChunk(nameDelta));
 
-          // 2. 发送包含参数的块
+          // 2. Send the chunk containing the arguments.
           const argsDelta: OpenAIDelta = {
             tool_calls: [
               {
@@ -125,7 +125,7 @@ export function createOpenAIStreamTransformer(
         }
 
         case 'reasoning':
-          // 这些事件目前在 OpenAI 格式中没有直接对应项，可以选择忽略或以某种方式记录
+          // These events currently have no direct equivalent in the OpenAI format and can be ignored or logged.
           if (debugMode) {
             console.log(`[Stream Transformer] Ignoring chunk: ${chunk.type}`);
           }
@@ -134,7 +134,7 @@ export function createOpenAIStreamTransformer(
     },
 
     flush(controller) {
-      // 在流结束时，发送一个带有 `tool_calls` 或 `stop` 的 finish_reason
+      // At the end of the stream, send a finish_reason of 'tool_calls' or 'stop'.
       const finish_reason = toolCallIndex > 0 ? 'tool_calls' : 'stop';
       enqueueChunk(controller, createChunk({}, finish_reason));
 

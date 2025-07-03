@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { type Config } from '@google/gemini-cli-core';
 import { createOpenAIStreamTransformer } from './stream-transformer.js';
-import { GeminiApiClient } from '../gemini-client.js'; // <-- 引入新类
-import { type OpenAIChatCompletionRequest } from '../types.js'; // <-- 引入新类型
+import { GeminiApiClient } from '../gemini-client.js';
+import { type OpenAIChatCompletionRequest } from '../types.js';
 import { mapErrorToOpenAIError } from '../utils/error-mapper.js';
 import { logger } from '../utils/logger.js';
 import { randomUUID } from 'node:crypto';
@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 export function createOpenAIRouter(config: Config, debugMode = false): Router {
   const router = Router();
 
-  // 中间件：为每个请求添加 requestId
+  // Middleware: Add a requestId to each request.
   router.use((req, res, next) => {
     (req as any).requestId = randomUUID();
     next();
@@ -31,23 +31,21 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
       const stream = body.stream !== false;
 
       if (!stream) {
-        // 非流式响应逻辑可以稍后实现，或直接返回错误
+        // Non-streaming responses are not yet implemented.
         res
           .status(501)
           .json({ error: 'Non-streaming responses are not yet implemented.' });
         return;
       }
 
-      // --- 流式响应 ---
+      // --- Streaming Response ---
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders();
 
-      // 1. 使用新的 GeminiApiClient
       const client = new GeminiApiClient(config, debugMode);
 
-      // 2. 发起请求，传递所有相关参数
       const geminiStream = await client.sendMessageStream({
         model: body.model,
         messages: body.messages,
@@ -57,8 +55,8 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
 
       const openAIStream = createOpenAIStreamTransformer(body.model, debugMode);
 
-      // --- 修正的核心逻辑 ---
-      // 1. 创建一个 ReadableStream 来包装我们的 Gemini 事件流
+      // --- Core streaming logic ---
+      // Create a ReadableStream to wrap our Gemini event stream.
       const readableStream = new ReadableStream({
         async start(controller) {
           for await (const value of geminiStream) {
@@ -68,11 +66,11 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
         },
       });
 
-      // 2. 将我们的流通过转换器
+      // Pipe our stream through the transformer.
       const transformedStream = readableStream.pipeThrough(openAIStream);
       const reader = transformedStream.getReader();
 
-      // 3. 手动读取每个转换后的块并立即写入响应
+      // Manually read each transformed chunk and write it to the response immediately.
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -84,7 +82,7 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
       } finally {
         reader.releaseLock();
       }
-      // --- 修正结束 ---
+      // --- End of core streaming logic ---
 
       const durationMs = Date.now() - startTime;
       logger.info('OpenAI bridge request finished', {
@@ -103,20 +101,20 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
       // 调用新的错误映射函数
       const { openAIError, statusCode } = mapErrorToOpenAIError(e);
 
-      // 使用映射后的状态码和错误对象进行响应
       if (!res.headersSent) {
         res.status(statusCode).json(openAIError);
       } else {
-        // 如果流已经开始，我们无法改变状态码，但可以在流中发送错误
+        // If headers are already sent, we can't change the status code,
+        // but we can send an error in the stream.
         res.write(`data: ${JSON.stringify({ error: openAIError.error })}\n\n`);
         res.end();
       }
     }
   });
 
-  // 可以添加 /v1/models 端点
+  // The /v1/models endpoint can be added here.
   router.get('/models', (req, res) => {
-    // 这里可以返回一个固定的模型列表，或者从 config 中获取
+    // This can return a fixed list of models or get them from the config.
     res.json({
       object: 'list',
       data: [

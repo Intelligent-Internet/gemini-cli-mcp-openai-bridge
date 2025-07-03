@@ -7,8 +7,8 @@ import {
   type Tool as GcliTool,
   type ToolResult,
   GeminiChat,
-  WebFetchTool, // <--- 添加这个导入
-  WebSearchTool, // <--- 添加这个导入
+  WebFetchTool,
+  WebSearchTool,
 } from '@google/gemini-cli-core';
 import {
   type CallToolResult,
@@ -27,7 +27,6 @@ export class GcliMcpBridge {
   private readonly config: Config;
   private readonly cliVersion: string;
   private readonly debugMode: boolean;
-  // **修改 2: 更新 transports 的类型以存储每个会话的 McpServer 和 Transport**
   private readonly sessions: Record<
     string,
     { mcpServer: McpServer; transport: StreamableHTTPServerTransport }
@@ -39,7 +38,6 @@ export class GcliMcpBridge {
     this.debugMode = debugMode;
   }
 
-  // **辅助方法：创建一个新的 McpServer 实例**
   private async createNewMcpServer(): Promise<McpServer> {
     const server = new McpServer(
       {
@@ -48,7 +46,6 @@ export class GcliMcpBridge {
       },
       { capabilities: { logging: {} } },
     );
-    // 在这里立即注册所有工具
     await this.registerAllGcliTools(server);
     return server;
   }
@@ -57,7 +54,6 @@ export class GcliMcpBridge {
     app.all('/mcp', async (req: Request, res: Response) => {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-      // **修改 5: 从 `sessions` map 中获取会话对象**
       let session = sessionId ? this.sessions[sessionId] : undefined;
 
       if (!session) {
@@ -68,7 +64,6 @@ export class GcliMcpBridge {
           );
 
           try {
-            // **修改 6: 为新会话创建独立的 McpServer 和 Transport**
             const newMcpServer = await this.createNewMcpServer();
             const newTransport = new StreamableHTTPServerTransport({
               sessionIdGenerator: () => randomUUID(),
@@ -77,7 +72,6 @@ export class GcliMcpBridge {
                   this.debugMode,
                   `Session initialized: ${newSessionId}`,
                 );
-                // 存储新的会话对象
                 this.sessions[newSessionId] = {
                   mcpServer: newMcpServer,
                   transport: newTransport,
@@ -96,7 +90,6 @@ export class GcliMcpBridge {
               }
             };
 
-            // 将新的 transport 连接到新的 McpServer 实例
             await newMcpServer.connect(newTransport);
 
             session = { mcpServer: newMcpServer, transport: newTransport };
@@ -130,7 +123,6 @@ export class GcliMcpBridge {
       }
 
       try {
-        // **修改 7: 使用会话特定的 transport 来处理请求**
         await session.transport.handleRequest(req, res, req.body);
       } catch (e) {
         logger.error('Error handling request:', e);
@@ -150,33 +142,30 @@ export class GcliMcpBridge {
   }
 
   private registerGcliTool(tool: GcliTool, mcpServer: McpServer) {
-    let toolInstanceForExecution = tool; // 默认使用从 ToolRegistry 传入的原始工具实例
+    let toolInstanceForExecution = tool;
 
-    // 检查是否是需要特殊处理的网页工具
+    // For web tools, check if a custom model is specified via environment variable.
+    // If so, create a new tool instance with a proxied config to use that model.
     if (tool.name === 'google_web_search' || tool.name === 'web_fetch') {
       const toolModel = process.env.GEMINI_TOOLS_DEFAULT_MODEL;
 
-      // 如果为这些工具设置了专用的模型，则创建一个新的配置和工具实例
       if (toolModel) {
         logger.debug(
           this.debugMode,
           `Using custom model "${toolModel}" for tool "${tool.name}"`,
         );
 
-        // 步骤 1: 创建一个 this.config 的代理。
-        // 这个代理对象会拦截对 getModel 方法的调用。
+        // Create a proxy for this.config to override getModel.
         const proxyConfig = new Proxy(this.config, {
           get: (target, prop, receiver) => {
-            // 如果调用的方法是 getModel，则返回我们指定的工具模型
             if (prop === 'getModel') {
               return () => toolModel;
             }
-            // 对于所有其他属性和方法的调用，都代理到原始的 config 对象
             return Reflect.get(target, prop, receiver);
           },
         }) as Config;
 
-        // 步骤 2: 根据工具名称，使用这个代理配置来创建新的工具实例
+        // Create a new tool instance with the proxied config.
         if (tool.name === 'google_web_search') {
           toolInstanceForExecution = new WebSearchTool(proxyConfig);
         } else {
@@ -199,8 +188,7 @@ export class GcliMcpBridge {
         const startTime = Date.now();
         logger.info('MCP tool call started', { toolName: tool.name, args });
         try {
-          // *** 关键：现在所有工具都通过这个统一的路径执行 ***
-          // toolInstanceForExecution 要么是原始工具，要么是带有自定义模型配置的新实例
+          // toolInstanceForExecution is either the original tool or a new instance with a custom model config.
           const result = await toolInstanceForExecution.execute(
             args,
             extra.signal,
@@ -218,7 +206,8 @@ export class GcliMcpBridge {
             toolName: tool.name,
             durationMs,
           });
-          throw e; // 重新抛出错误，让 MCP SDK 处理
+          // Re-throw the error to be handled by the MCP SDK.
+          throw e;
         }
       },
     );
@@ -242,7 +231,7 @@ export class GcliMcpBridge {
         case 'boolean':
           return z.boolean().describe(prop.description || '');
         case 'array':
-          // This is the key fix: recursively call the converter for `items`.
+          // Recursively call the converter for `items`.
           if (!prop.items) {
             // A valid array schema MUST have `items`. Fallback to `any` if missing.
             return z.array(z.any()).describe(prop.description || '');
@@ -261,7 +250,6 @@ export class GcliMcpBridge {
       }
     };
 
-    // If no schema or properties, return an empty shape object.
     if (!jsonSchema || !jsonSchema.properties) {
       return {};
     }
@@ -275,7 +263,7 @@ export class GcliMcpBridge {
       }
       shape[key] = fieldSchema;
     }
-    return shape; // Directly return the shape object.
+    return shape;
   }
 
   private convertGcliResultToMcpResult(
