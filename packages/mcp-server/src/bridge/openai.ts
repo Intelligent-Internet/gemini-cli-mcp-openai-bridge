@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { type Config } from '@google/gemini-cli-core';
 import { createOpenAIStreamTransformer } from './stream-transformer.js';
-import { WritableStream } from 'node:stream/web';
 import { GeminiApiClient } from '../gemini-client.js'; // <-- 引入新类
 import { type OpenAIChatCompletionRequest } from '../types.js'; // <-- 引入新类型
 
@@ -44,15 +43,10 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
         tool_choice: body.tool_choice,
       });
 
-      // 3. 创建转换器和写入器
       const openAIStream = createOpenAIStreamTransformer(body.model, debugMode);
-      const writer = new WritableStream({
-        write(chunk) {
-          res.write(chunk);
-        },
-      });
 
-      // 4. 创建 ReadableStream 并通过管道连接
+      // --- 修正的核心逻辑 ---
+      // 1. 创建一个 ReadableStream 来包装我们的 Gemini 事件流
       const readableStream = new ReadableStream({
         async start(controller) {
           for await (const value of geminiStream) {
@@ -62,7 +56,24 @@ export function createOpenAIRouter(config: Config, debugMode = false): Router {
         },
       });
 
-      await readableStream.pipeThrough(openAIStream).pipeTo(writer);
+      // 2. 将我们的流通过转换器
+      const transformedStream = readableStream.pipeThrough(openAIStream);
+      const reader = transformedStream.getReader();
+
+      // 3. 手动读取每个转换后的块并立即写入响应
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          res.write(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      // --- 修正结束 ---
+
       res.end();
     } catch (error) {
       console.error('[OpenAI Bridge] Error:', error);
